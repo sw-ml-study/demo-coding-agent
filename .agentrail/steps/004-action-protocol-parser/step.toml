@@ -1,9 +1,10 @@
 number = 4
 slug = "action-protocol-parser"
-status = "in-progress"
+status = "completed"
 description = "Implement agents/protocol.mlpl: u:parse_action(text) turns exactly one model ..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T10:15:40"
+completed_at = "2026-09-15T11:27:02"
 task_type = "mlpl-parser"
-commits = []
+commits = ["b0617617b997a857becc9e58b42eb7a6b333e7c4"]
