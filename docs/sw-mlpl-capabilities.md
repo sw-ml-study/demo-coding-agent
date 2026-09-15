@@ -5,22 +5,23 @@ against sw-MLPL 0.22.0 (`../sw-mlpl` release build, commit e6070964). Entries
 move from "documented" to "measured" once a probe or mlplunit test in this
 repository exercises them; Saga 1 step 2 owns that measurement.
 
-Categories: **supported** (works as documented), **awkward** (expressible but
+Categories: **measured** (pinned by a test or probe in this repository),
+**supported** (works as documented, not yet pinned), **awkward** (expressible but
 clumsy, worth noting upstream), **extension** (not in the language, belongs
 in this repository's Rust `agent-tools` extension), **blocked** (neither a
 builtin nor an extension can express it; needs a probe before any request).
 
 | need                                  | primitive                                  | status     | evidence |
 |---------------------------------------|--------------------------------------------|------------|----------|
-| ask a local model                     | `llm_call(url, prompt, model[, system])`   | supported  | documented in `docs/using-llm-tool.md`; live probe pending |
-| read a project file                   | `read_text(path)` -> `ok(text)`/`err`      | supported  | documented in `lang-reference.md`; probe pending |
-| list project files                    | `fs_walk(root, {recursive, kind, pattern})`| supported  | documented; probe pending |
-| write a whole file                    | `write_text`, `write_atomic`               | supported  | documented; probe pending |
-| file metadata                         | `file_metadata(path)`                      | supported  | documented |
-| sandbox confinement                   | `--source-dir` root, symlinks not followed | supported  | documented; escape probe pending |
-| run an MLPL script as a child         | `run_script(path, opts)`                   | supported  | MLPL only; not a general process runner |
-| prefix-parse an action line           | `str_find`, `str_slice`, `str_split`, `str_eq`, `str_len` | supported | documented |
-| join observations                     | `str_join(parts, sep)`                     | supported  | documented |
+| ask a local model                     | `llm_call(url, prompt, model[, system])`   | measured   | `just llm-probe`: qwen2.5-coder:7b answered a one-word system-prompted ping with `PONG`; reply is a plain string |
+| read a project file                   | `read_text(path)` -> `ok(text)`/`err`      | measured   | `tests/test_fs_builtins.mlpl`: exact text, missing file is `err("read_text: No such file...")` |
+| list project files                    | `fs_walk(root, {recursive, kind, pattern})`| measured   | root-relative lexical paths that feed `read_text` directly |
+| write a whole file                    | `write_text`, `write_atomic`               | measured   | create, replace, read back, `remove_path`; missing parent directory is an `err` (see findings) |
+| file metadata                         | `file_metadata(path)`                      | measured   | `{kind, size, modified_unix_ms}` |
+| sandbox confinement                   | `--source-dir` root                        | measured   | `../` and an outside-target symlink give `err("...: outside the sandbox")` for read and write; an inside-target symlink is readable (see findings) |
+| run an MLPL script as a child         | `run_script(path, opts)`                   | measured   | `tests/test_run_script.mlpl`: `{status, value, value_raw, error, events, events_kind}`; child `err` is `status: "err"`; MLPL only, not a process runner |
+| prefix-parse an action line           | `str_find`, `str_slice`, `str_split`, `str_eq`, `str_len`, `list_len`, `list_get` | measured | `tests/test_string_protocol.mlpl`; no `str_starts_with` or `str_trim` exist, prefix is `str_find(s, verb) == 0` |
+| join observations                     | `str_concat(a, b)`, `str_join(parts, sep)` | measured   | `+` on two strings is an error (see findings); `str_join([], sep)` is `""` |
 | inject a fake model                   | function references, `call`                | supported  | used by mlplunit itself |
 | search text across files              | none                                       | extension  | ripgrep crates (`grep-searcher`, `grep-regex`, `ignore`) in `agent-tools`; `rg` subprocess fallback. Pure MLPL `fs_walk`+`read_text`+`str_find` is possible but ignores `.gitignore` and binaries |
 | tagged action values                  | records + `Result`                         | awkward    | `{tool: ..}` records work; no `match` on a tag |
@@ -37,4 +38,38 @@ recorded here as they are met, each with: a minimal probe, expected versus
 observed behavior, the affected agent, and an honest "unavailable" status
 until upstream ships a change. Do not work around a bug silently.
 
-None yet.
+### F1. `+` on two strings fails with an array diagnostic (bug, diagnostic)
+
+Probe: `x = "a" + "b"` gives `error: expected an array value, got a string`.
+Expected: either string concatenation or a message that names strings and
+points at `str_concat`. Affects every agent: prompt building must use
+`str_concat`/`str_join`, and the research transcript's `+` pseudo-code does
+not run. Suggested improvement: make `+` concatenate strings, or at least
+emit `strings do not support +; use str_concat`.
+
+### F2. Calling an undefined function reports the same array diagnostic (bug)
+
+Probe: `nope_fn("a")` gives `error: expected an array value, got a string`
+instead of an unknown-function error. Cost measured directly: it hid the fact
+that `str_starts_with` and `str_trim` do not exist. Expected: `unknown
+function: nope_fn`. Affects every step that guesses a builtin name.
+
+### F3. Inside-target symlinks are readable despite "never followed" (docs)
+
+Probe: `tests/fixtures/link-inside -> ../../LICENSE` reads successfully;
+`link-outside -> /etc/hosts` is `err(outside the sandbox)`. The behavior is
+the useful one; the lang-reference wording "symlinks are never followed"
+should say "symlinks that resolve outside the sandbox are refused".
+
+### F4. `write_text` does not create parent directories (awkward)
+
+Probe: `write_text("tests/scratch/no-such-dir/x.txt", "x")` is
+`err(No such file or directory)`. An agent creating a new module in a new
+directory needs a `make_dir` builtin or a documented `write_text` option.
+Suggested improvement: add `make_dir(path)` (sandboxed, `ok(1)`/`err`).
+
+### F5. `len` rejects string lists (awkward)
+
+Probe: `len(str_split("a b", " "))` is an error; `list_len` is required.
+Expected by an array-language reader: `len` is total over lists. Minor;
+recorded so agents use `list_len`.

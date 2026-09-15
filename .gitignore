@@ -11,6 +11,8 @@
 /out/
 /tmp/
 *.tmp
+/tests/scratch/*
+!/tests/scratch/.gitkeep
 
 # Local environment and tool overrides.
 .env

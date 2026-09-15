@@ -1,0 +1,2 @@
+# Child script returning a record for run_script probes.
+{answer: 42, note: "child"}

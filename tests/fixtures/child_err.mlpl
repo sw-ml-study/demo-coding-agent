@@ -1,0 +1,2 @@
+# Child script whose final value is an Err for run_script probes.
+err("child failed")

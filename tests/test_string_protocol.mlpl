@@ -1,0 +1,58 @@
+# Measured string builtins needed to parse a prefix action protocol and build prompts.
+
+@test {name: "str_find locates a verb prefix at index zero", tags: ["string", "protocol"]}
+def u:test_str_find_prefix() {
+  "Prove prefix detection: index 0 when present, -1 when absent.";
+  u:assert_eq(str_find("READ src/lib.rs", "READ "), 0, "prefix present")?;
+  u:assert_eq(str_find("DONE all good", "READ "), -1, "prefix absent")?;
+  u:assert_eq(str_find("xREAD y", "READ "), 1, "not a prefix when index is not 0")
+}
+
+@test {name: "str_slice extracts the argument after a verb", tags: ["string", "protocol"]}
+def u:test_str_slice_argument() {
+  "Prove character-indexed slicing with a clamped length.";
+  line = "READ src/lib.rs";
+  u:assert_text_eq(str_slice(line, 5, str_len(line)), "src/lib.rs", "argument")?;
+  u:assert_text_eq(str_slice(line, 5, 1000), "src/lib.rs", "length clamps at end")
+}
+
+@test {name: "str_split turns a command into argv", tags: ["string", "protocol", "argv"]}
+def u:test_str_split_argv() {
+  "Prove whitespace splitting and list_len for allow-list matching.";
+  argv = str_split("cargo test --lib", " ");
+  u:assert_text_eq(type_of(argv), "string-list", "string list")?;
+  u:assert_eq(list_len(argv), 3, "three words")?;
+  u:assert_text_eq(unwrap(list_get(argv, 0)), "cargo", "first word")?;
+  u:assert_eq(list_len(str_split("", " ")), 1, "empty input is one empty element")
+}
+
+@test {name: "str_split handles CRLF line endings", tags: ["string", "protocol", "lines"]}
+def u:test_str_split_crlf() {
+  "Prove model output with Windows line endings can be split explicitly.";
+  lines = str_split("WRITE a.txt\r\nbody\r\nEND", "\r\n");
+  u:assert_eq(list_len(lines), 3, "three lines")?;
+  u:assert_text_eq(unwrap(list_get(lines, 2)), "END", "terminator line")
+}
+
+@test {name: "str_concat and str_join build prompts", tags: ["string", "prompt"]}
+def u:test_concat_and_join() {
+  "Prove the two concatenation forms; the + operator rejects strings.";
+  u:assert_text_eq(str_concat("TASK:\n", "fix it"), "TASK:\nfix it", "two-part concat")?;
+  u:assert_text_eq(str_join(["a", "b", "c"], "\n"), "a\nb\nc", "join with newline")?;
+  u:assert_text_eq(str_join([], "\n"), "", "empty join")
+}
+
+@test {name: "str_eq compares whole strings", tags: ["string", "protocol"]}
+def u:test_str_eq_whole() {
+  "Prove whole-string equality, which differs from substring str_find.";
+  u:assert_eq(str_eq("DONE", "DONE"), 1, "equal")?;
+  u:assert_eq(str_eq("DONE", "DONE "), 0, "trailing space differs")
+}
+
+@test {name: "str_len counts characters not bytes", tags: ["string", "unicode"]}
+def u:test_str_len_unicode() {
+  "Prove multi-byte characters count once so slices stay character-aligned.";
+  u:assert_eq(str_len("héllo"), 5, "five characters")
+}
+
+u:run_registered_tests()

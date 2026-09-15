@@ -1,6 +1,6 @@
 number = 2
 slug = "measured-builtins"
-status = "pending"
+status = "in-progress"
 description = "Add root mlplunit.conf, scripts/run-tests, and a just tests recipe wired into..."
 role = "production"
 context_files = []

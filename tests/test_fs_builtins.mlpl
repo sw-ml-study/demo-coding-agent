@@ -1,0 +1,99 @@
+# Measured contract of the sandboxed filesystem builtins a coding agent relies on.
+
+@test {name: "read_text returns ok(text) for a project file", tags: ["fs", "read"]}
+def u:test_read_text_ok() {
+  "Prove a project-root-relative read succeeds and preserves the exact text.";
+  result = read_text("tests/fixtures/plain.txt");
+  u:assert_ok(result, "read succeeds")?;
+  u:assert_text_eq(unwrap(result), "alpha\nbeta\n", "exact text with trailing newline")
+}
+
+@test {name: "read_text returns err for a missing file", tags: ["fs", "read", "error"]}
+def u:test_read_text_missing_is_err() {
+  "Prove a missing file is a Result err, not a hard evaluation error.";
+  result = read_text("tests/fixtures/does-not-exist.txt");
+  u:assert_err(result, "missing file is err")?;
+  u:assert_true(str_find(err_message(result), "read_text:") == 0, "message names the builtin")
+}
+
+@test {name: "read_text refuses a parent-directory escape", tags: ["fs", "sandbox"]}
+def u:test_read_text_parent_escape_is_err() {
+  "Prove ../ traversal outside the sandbox root is an err naming the sandbox.";
+  result = read_text("../demo-ml-microscope/README.md");
+  u:assert_err(result, "escape is err")?;
+  u:assert_true(str_find(err_message(result), "outside the sandbox") > 0, "message says outside the sandbox")
+}
+
+@test {name: "read_text refuses a symlink that leaves the sandbox", tags: ["fs", "sandbox", "symlink"]}
+def u:test_read_text_symlink_escape_is_err() {
+  "Prove a symlink whose target is outside the root is an err, not a read.";
+  result = read_text("tests/fixtures/link-outside");
+  u:assert_err(result, "outside symlink is err")?;
+  u:assert_true(str_find(err_message(result), "outside the sandbox") > 0, "message says outside the sandbox")
+}
+
+@test {name: "read_text follows a symlink whose target stays inside the sandbox", tags: ["fs", "sandbox", "symlink"]}
+def u:test_read_text_symlink_inside_is_ok() {
+  "Record measured behavior: an inside-root symlink target is readable.";
+  result = read_text("tests/fixtures/link-inside");
+  u:assert_ok(result, "inside symlink reads")?;
+  u:assert_true(str_find(unwrap(result), "MIT License") == 0, "content is the license")
+}
+
+@test {name: "fs_walk lists matching files in lexical order", tags: ["fs", "walk"]}
+def u:test_fs_walk_pattern() {
+  "Prove a recursive pattern walk returns root-relative paths usable by read_text.";
+  result = fs_walk("examples/tiny-rust-project", {recursive: 1, kind: "file", pattern: "*.rs"});
+  u:assert_ok(result, "walk succeeds")?;
+  files = unwrap(result);
+  u:assert_eq(list_len(files), 1, "one Rust source file")?;
+  u:assert_text_eq(unwrap(list_get(files, 0)), "examples/tiny-rust-project/src/lib.rs", "root-relative path")?;
+  u:assert_ok(read_text(unwrap(list_get(files, 0))), "walk output feeds read_text")
+}
+
+@test {name: "write_text then read_text then remove_path round-trips", tags: ["fs", "write"]}
+def u:test_write_text_round_trip() {
+  "Prove whole-file write, read-back, and removal inside the sandbox.";
+  path = "tests/scratch/write-probe.txt";
+  u:assert_ok(write_text(path, "first\n"), "write creates")?;
+  u:assert_text_eq(unwrap(read_text(path)), "first\n", "read back")?;
+  u:assert_ok(write_text(path, "second\n"), "write replaces")?;
+  u:assert_text_eq(unwrap(read_text(path)), "second\n", "replacement read back")?;
+  u:assert_ok(remove_path(path), "remove")?;
+  u:assert_err(read_text(path), "gone after remove")
+}
+
+@test {name: "write_atomic round-trips like write_text", tags: ["fs", "write", "atomic"]}
+def u:test_write_atomic_round_trip() {
+  "Prove the crash-safe write is a drop-in for whole-file agent edits.";
+  path = "tests/scratch/atomic-probe.txt";
+  u:assert_ok(write_atomic(path, "atomic\n"), "atomic write")?;
+  u:assert_text_eq(unwrap(read_text(path)), "atomic\n", "read back")?;
+  u:assert_ok(remove_path(path), "remove")
+}
+
+@test {name: "write_text refuses a parent-directory escape", tags: ["fs", "sandbox", "write"]}
+def u:test_write_text_escape_is_err() {
+  "Prove the model can never write outside the project root.";
+  result = write_text("../escape-probe.txt", "x");
+  u:assert_err(result, "escape write is err")?;
+  u:assert_true(str_find(err_message(result), "outside the sandbox") > 0, "message says outside the sandbox")
+}
+
+@test {name: "write_text does not create missing parent directories", tags: ["fs", "write", "awkward"]}
+def u:test_write_text_missing_parent_is_err() {
+  "Record measured behavior: a new file in a new directory is an err.";
+  u:assert_err(write_text("tests/scratch/no-such-dir/x.txt", "x"), "missing parent is err")
+}
+
+@test {name: "file_metadata reports kind and size", tags: ["fs", "metadata"]}
+def u:test_file_metadata() {
+  "Prove metadata is available without reading, for budgeting reads.";
+  result = file_metadata("tests/fixtures/plain.txt");
+  u:assert_ok(result, "metadata ok")?;
+  meta = unwrap(result);
+  u:assert_text_eq(meta.kind, "file", "kind")?;
+  u:assert_eq(meta.size, 11, "byte size")
+}
+
+u:run_registered_tests()

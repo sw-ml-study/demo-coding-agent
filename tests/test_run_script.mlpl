@@ -1,0 +1,32 @@
+# Measured outcome record of run_script, the only child-execution builtin.
+
+@test {name: "run_script returns a status record for an ok child", tags: ["run-script"]}
+def u:test_run_script_ok_record() {
+  "Prove the outcome fields an agent can branch on for a successful child.";
+  result = run_script("tests/fixtures/child_ok.mlpl");
+  u:assert_ok(result, "run succeeds")?;
+  outcome = unwrap(result);
+  u:assert_text_eq(outcome.status, "ok", "status")?;
+  u:assert_eq(outcome.value_raw.answer, 42, "value_raw keeps the real record")?;
+  u:assert_text_eq(outcome.value_raw.note, "child", "value_raw string field")?;
+  u:assert_text_eq(type_of(outcome.value), "string", "value is a display rendering")?;
+  u:assert_text_eq(outcome.error, "", "no error text")
+}
+
+@test {name: "run_script reports a child whose final value is err", tags: ["run-script", "error"]}
+def u:test_run_script_err_child() {
+  "Prove a child Err surfaces as status err with the payload, not a hard error.";
+  result = run_script("tests/fixtures/child_err.mlpl");
+  u:assert_ok(result, "runner itself succeeds")?;
+  outcome = unwrap(result);
+  u:assert_text_eq(outcome.status, "err", "status")?;
+  u:assert_text_eq(outcome.value_raw, "child failed", "err payload")
+}
+
+@test {name: "run_script returns err for a missing script", tags: ["run-script", "error"]}
+def u:test_run_script_missing() {
+  "Prove a missing child path is a Result err.";
+  u:assert_err(run_script("tests/fixtures/no-such-child.mlpl"), "missing script is err")
+}
+
+u:run_registered_tests()

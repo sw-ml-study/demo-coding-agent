@@ -1,0 +1,10 @@
+# Opt-in live probe: prove llm_call reaches a local Ollama model and returns a string.
+host = unwrap_or(list_get(args(), 0), "http://localhost:11434");
+model = unwrap_or(list_get(args(), 1), "qwen2.5-coder:7b");
+system = "You are a probe. Reply with exactly one word: PONG";
+reply = llm_call(host, "ping", model, system);
+print("host:", host);
+print("model:", model);
+print("reply type:", type_of(reply));
+print("reply:", reply);
+{host: host, model: model, reply_type: type_of(reply), reply_chars: str_len(reply)}

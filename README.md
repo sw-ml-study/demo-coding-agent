@@ -1,6 +1,15 @@
 # demo-coding-agent
 
-A coding agent small enough to understand.
+A coding agent small enough to understand, written in sw-MLPL.
+
+[sw-MLPL](https://github.com/sw-ml-study/sw-mlpl) is a small array/functional
+language for machine-learning study: whole-array arithmetic, records, function
+references, `Result` values, autograd, and native model helpers, with an
+interpreter, a compiler, and a browser build. Try it in the
+[sw-MLPL playground](https://sw-ml-study.github.io/sw-mlpl/) and browse the
+[sw-ml-study demo repositories](https://github.com/orgs/sw-ml-study/repositories?q=demo)
+that exercise it: native extensions, ML microscopes, algorithms, data
+structures, and more. This repository is the coding-agent demo in that set.
 
 The control loop is sw-MLPL. Rust supplies only filesystem and process
 mechanisms that the language cannot express itself. A local LLM supplies
@@ -110,10 +119,10 @@ The precommit gate is:
 just check
 ```
 
-Today it checks repository structure, peer license parity, documentation
-links, the generated Agentrail briefing, and canonical MLPL style. Each step
-that adds executable behavior extends it with mlplunit suites and, for Rust
-crates, `sw-checklist` and scoped `cargo test`.
+It checks repository structure, peer license parity, documentation links,
+the generated Agentrail briefing, canonical MLPL style, and the mlplunit
+suites. Rust crates, once present, add `sw-checklist` and scoped
+`cargo test`.
 
 Read the [architecture](docs/architecture.md), [delivery plan](docs/plan.md),
 [saga queue](docs/sagas.md), [permissions](docs/permissions.md), and
@@ -121,9 +130,25 @@ Read the [architecture](docs/architecture.md), [delivery plan](docs/plan.md),
 agent. The original design discussion is retained in
 [`docs/research.txt`](docs/research.txt).
 
+## Tests and probes
+
+```sh
+just tests        # 21 native mlplunit probes, no model server needed
+just llm-probe    # opt-in: one llm_call round trip against local Ollama
+```
+
+The mlplunit suites under `tests/` pin the measured behavior of every builtin
+the agent will depend on: sandboxed reads, walks, writes, and removals; parent
+and symlink escapes returning `err`; the `run_script` outcome record; and the
+string helpers a prefix action protocol needs. The fixture crate the agent
+will edit lives in `examples/tiny-rust-project`.
+
 ## Current status
 
-Foundation only. No agent runs yet. The next step measures the builtins an
-agent depends on and adds mlplunit infrastructure.
+Foundation and measured builtins are complete. No agent runs yet. The
+[capability ledger](docs/sw-mlpl-capabilities.md) now records measured rows
+and five findings for sw-MLPL, including that `+` does not concatenate
+strings and that an undefined function call reports a misleading diagnostic.
+The next step builds the v0 read/think agent.
 
 Copyright (c) 2026 Michael A Wright. Distributed under the [MIT License](LICENSE).

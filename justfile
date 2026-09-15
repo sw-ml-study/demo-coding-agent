@@ -28,6 +28,14 @@ instructions:
 mlpl-style:
     ./scripts/check-mlpl-style
 
+# Run native mlplunit probes; arguments select paths, tags, or filters.
+tests *args:
+    ./scripts/run-tests {{args}}
+
+# Opt-in live llm_call probe against Ollama (OLLAMA_HOST, OLLAMA_MODEL). Not in check.
+llm-probe:
+    ./scripts/run-llm-probe
+
 # Run the complete precommit gate.
 check:
     ./scripts/check
