@@ -1,4 +1,4 @@
-number = 7
+number = 9
 slug = "rust-close-the-loop"
 status = "pending"
 description = "Close the loop on the Rust target: the agent adds a unit test for add to exam..."

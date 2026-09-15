@@ -1,4 +1,4 @@
-number = 5
+number = 7
 slug = "agent-tools-extension"
 status = "pending"
 description = "Add extensions/agent-tools as a Rust cdylib on the demo-extensions ABI and SD..."
