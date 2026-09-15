@@ -1,0 +1,122 @@
+# Prove the bounded loop with scripted transcripts: flow, policy, stop reasons, parse errors.
+include "agents/loop.mlpl";
+
+def u:allow_all() {
+  "Permissions that allow every tool.";
+  {read: "allow", search: "allow", write: "allow", run: "allow"}
+}
+
+def u:ask_writes() {
+  "Permissions where writes must be approved.";
+  {read: "allow", search: "allow", write: "ask", run: "allow"}
+}
+
+def u:transcript_write_note() {
+  "A three-turn transcript: read the fixture, write a scratch note, finish.";
+  call(:u:ask_transcript, ["READ examples/tiny-rust-project/src/lib.rs", "WRITE tests/scratch/loop-note.txt\nadd exists\nEND", "DONE wrote a note"])
+}
+
+@test {name: "loop context is TASK, WORK SO FAR, then the instruction", tags: ["loop", "prompt"]}
+def u:test_build_context() {
+  "Pin the exact context layout.";
+  state = u:loop_initial_state("fix it", 3);
+  u:assert_text_eq(u:build_context(state), "TASK:\nfix it\n\nWORK SO FAR:\n\n\nChoose the next action.", "context")
+}
+
+@test {name: "authorize is a pure lookup by tool", tags: ["loop", "policy"]}
+def u:test_authorize() {
+  "Prove allow, ask, deny come straight from the permissions record and done is always allowed.";
+  permissions = {read: "allow", search: "deny", write: "ask", run: "deny"};
+  u:assert_text_eq(u:authorize({tool: "read", path: "a"}, permissions), "allow", "read")?;
+  u:assert_text_eq(u:authorize({tool: "write", path: "a", body: ""}, permissions), "ask", "write")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["cargo"]}, permissions), "deny", "run")?;
+  u:assert_text_eq(u:authorize({tool: "search", text: "x"}, permissions), "deny", "search")?;
+  u:assert_text_eq(u:authorize({tool: "done", summary: "x"}, permissions), "allow", "done")
+}
+
+@test {name: "transcript model replies by counting prior actions", tags: ["loop", "fake-model"]}
+def u:test_ask_transcript() {
+  "Prove the scripted model is pure over the prompt and exhausts to DONE.";
+  ask = call(:u:ask_transcript, ["READ a", "DONE b"]);
+  u:assert_text_eq(call(ask, "TASK:\nx\n\nWORK SO FAR:\n\n\nChoose"), "READ a", "turn 0")?;
+  u:assert_text_eq(call(ask, "x\n\nACTION:\nREAD a\n\nOBSERVATION:\nstuff"), "DONE b", "turn 1")?;
+  u:assert_text_eq(call(ask, "\nACTION:\n1\nACTION:\n2"), "DONE transcript exhausted", "exhausted")
+}
+
+@test {name: "loop reads, writes, and finishes with DONE", tags: ["loop", "flow"]}
+def u:test_loop_read_write_done() {
+  "End to end with allow-all: three steps, file written, history carries the source, files lists both paths.";
+  final = u:run_loop("make a note", 6, u:transcript_write_note(), u:allow_all(), :u:decide_no);
+  u:assert_text_eq(final.reason, "done", "stop reason")?;
+  u:assert_eq(final.iteration, 3, "three steps")?;
+  u:assert_text_eq(final.answer, "wrote a note", "summary is the answer")?;
+  u:assert_true(str_find(final.history, "pub fn add") > 0, "read observation in history")?;
+  u:assert_true(str_find(final.history, "wrote tests/scratch/loop-note.txt") > 0, "write observation in history")?;
+  u:assert_text_eq(final.files, "examples/tiny-rust-project/src/lib.rs\ntests/scratch/loop-note.txt\n", "touched files")?;
+  u:assert_text_eq(unwrap(read_text("tests/scratch/loop-note.txt")), "add exists\n", "file content")?;
+  u:assert_ok(remove_path("tests/scratch/loop-note.txt"), "cleanup")
+}
+
+@test {name: "a denied write stops the loop without writing", tags: ["loop", "policy"]}
+def u:test_loop_denied_write() {
+  "With write: deny the second step stops with reason denied and no file appears.";
+  permissions = {read: "allow", search: "allow", write: "deny", run: "allow"};
+  final = u:run_loop("make a note", 6, u:transcript_write_note(), permissions, :u:decide_yes);
+  u:assert_text_eq(final.reason, "denied", "stop reason")?;
+  u:assert_eq(final.iteration, 2, "stopped on the write")?;
+  u:assert_eq(str_find(final.answer, "denied: WRITE tests/scratch/loop-note.txt"), 0, "answer names the action")?;
+  u:assert_err(read_text("tests/scratch/loop-note.txt"), "nothing written")
+}
+
+@test {name: "ask resolves through the injected decision", tags: ["loop", "policy", "ask"]}
+def u:test_loop_ask_decision() {
+  "Refused ask stops as denied; approved ask writes and finishes.";
+  refused = u:run_loop("make a note", 6, u:transcript_write_note(), u:ask_writes(), :u:decide_no);
+  u:assert_text_eq(refused.reason, "denied", "refused")?;
+  u:assert_err(read_text("tests/scratch/loop-note.txt"), "refused write absent")?;
+  approved = u:run_loop("make a note", 6, u:transcript_write_note(), u:ask_writes(), :u:decide_yes);
+  u:assert_text_eq(approved.reason, "done", "approved")?;
+  u:assert_ok(read_text("tests/scratch/loop-note.txt"), "approved write present")?;
+  u:assert_ok(remove_path("tests/scratch/loop-note.txt"), "cleanup")
+}
+
+@test {name: "an exhausted budget stops the loop", tags: ["loop", "budget"]}
+def u:test_loop_budget() {
+  "A model that never finishes is cut off after budget steps with reason budget.";
+  ask = call(:u:ask_transcript, ["READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt"]);
+  final = u:run_loop("loop forever", 3, ask, u:allow_all(), :u:decide_no);
+  u:assert_text_eq(final.reason, "budget", "stop reason")?;
+  u:assert_eq(final.iteration, 3, "exactly budget steps")?;
+  u:assert_eq(u:count_occurrences(final.history, "\nACTION:\n"), 3, "three actions recorded")
+}
+
+@test {name: "a malformed reply becomes a PARSE ERROR observation and the loop continues", tags: ["loop", "parse"]}
+def u:test_loop_parse_error_continues() {
+  "The model sees its own protocol mistake and can recover within the budget.";
+  ask = call(:u:ask_transcript, ["Sure, let me look.", "DONE recovered"]);
+  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
+  u:assert_text_eq(final.reason, "done", "recovered")?;
+  u:assert_eq(final.iteration, 2, "two steps")?;
+  u:assert_true(str_find(final.history, "PARSE ERROR: unknown verb: Sure, let me look.") > 0, "parse error observed")
+}
+
+@test {name: "a failed read is an ERROR observation, not a crash", tags: ["loop", "error"]}
+def u:test_loop_read_error_observed() {
+  "Builtin errs flow into history as text so the model can choose again.";
+  ask = call(:u:ask_transcript, ["READ examples/tiny-rust-project/src/nope.rs", "DONE gave up"]);
+  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
+  u:assert_text_eq(final.reason, "done", "finished")?;
+  u:assert_true(str_find(final.history, "ERROR: read_text:") > 0, "error observed")
+}
+
+@test {name: "search and run report not available yet", tags: ["loop", "saga2"]}
+def u:test_loop_unavailable_tools() {
+  "Until Saga 2 supplies the extension, SEARCH and RUN observe a clear placeholder.";
+  ask = call(:u:ask_transcript, ["SEARCH pub fn", "RUN cargo test", "DONE ok"]);
+  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
+  u:assert_true(str_find(final.history, "search is not available yet") > 0, "search placeholder")?;
+  u:assert_true(str_find(final.history, "run is not available yet") > 0, "run placeholder")?;
+  u:assert_text_eq(final.files, "", "no files touched")
+}
+
+u:run_registered_tests()

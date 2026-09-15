@@ -58,22 +58,26 @@ state
   |> update_state
 ```
 
-State is one record:
+State is one record, measured in `agents/loop.mlpl`:
 
 ```text
 {
     task: "...",
     iteration: 4,
-    history: "...",
-    files: ["src/lib.rs"],
-    tests_passed: 0,
-    budget: 12
+    history: "...ACTION:...OBSERVATION:...",
+    files: "src/lib.rs\nnotes.txt\n",
+    budget: 12,
+    done: 0,
+    reason: "",
+    answer: ""
 }
 ```
 
-The loop repeats a bounded number of times and stops on `DONE`, on a denied
-action, or when the budget is spent. Every stop reason is a value, not an
-exception.
+`files` is a newline-joined string rather than a list because string lists
+cannot be appended to (ledger F8). The loop repeats a bounded number of
+times and stops with `reason` set to `done`, `denied`, or `budget`. Every
+stop reason is a value, not an exception; a malformed reply or a failed
+builtin becomes a `PARSE ERROR:` or `ERROR:` observation for the next turn.
 
 ## The action protocol
 

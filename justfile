@@ -40,6 +40,10 @@ llm-probe:
 v0:
     ./scripts/run-v0
 
+# Opt-in live bounded-loop run (LOOP_TASK, LOOP_BUDGET, LOOP_APPROVE=1 override).
+loop:
+    ./scripts/run-loop
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

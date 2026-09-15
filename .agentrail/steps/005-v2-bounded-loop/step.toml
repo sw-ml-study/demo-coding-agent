@@ -1,6 +1,6 @@
 number = 5
 slug = "v2-bounded-loop"
-status = "pending"
+status = "in-progress"
 description = "Implement agents/loop.mlpl: the bounded observe/decide/act/update loop over a..."
 role = "production"
 context_files = []

@@ -25,8 +25,11 @@ permissions = {
 }
 ```
 
-`u:authorize(action, permissions)` is a pure function returning `"allow"`,
-`"ask"`, or `"deny"`. It is tested without a model or a filesystem.
+`u:authorize(action, permissions)` in `agents/loop.mlpl` is a pure function
+returning `"allow"`, `"ask"`, or `"deny"`, tested without a model or a
+filesystem. The measured record has one field per tool: `{read, search,
+write, run}`; `done` is always allowed. `git` and `shell` fields arrive with
+the extension in Saga 2.
 
 ## Initial allow-list for `RUN`
 
@@ -45,11 +48,13 @@ denial is recorded as an observation so the model can choose differently.
 
 ## `ask` in a non-interactive run
 
-Under test, `ask` resolves through an injected decision function, so a suite
-can prove both the approved and the refused path. Live runs default `ask` to
-deny and print the pending action; an explicit `--approve-writes` style flag
-in the `just` recipe flips it. The agent never blocks waiting on a prompt it
-cannot show.
+`ask` resolves through an injected decision function `decide(action)`
+returning 1 or 0. Tests pass `:u:decide_yes` or `:u:decide_no` to prove both
+paths. Live runs default to `decide_no`, so `just loop` is a dry run that
+stops with reason `denied` and prints the refused action; `LOOP_APPROVE=1`
+switches to `decide_yes`. The agent never blocks waiting on a prompt it
+cannot show. A denial ends the run rather than continuing, so the model
+cannot probe the policy by retrying.
 
 ## Per-agent policy
 

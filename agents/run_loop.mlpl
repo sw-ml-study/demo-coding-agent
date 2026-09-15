@@ -1,0 +1,41 @@
+# Live entry for the bounded loop: mlpl-repl --source-dir <repo> -f agents/run_loop.mlpl -- HOST MODEL [TASK] [BUDGET] [APPROVE]
+include "loop.mlpl";
+
+host = unwrap_or(list_get(args(), 0), "http://localhost:11434");
+model = unwrap_or(list_get(args(), 1), "qwen2.5-coder:7b");
+task = unwrap_or(list_get(args(), 2), "Read examples/tiny-rust-project/src/lib.rs and write tests/scratch/NOTES.md with a one-paragraph description of the crate.");
+budget = unwrap(to_number(unwrap_or(list_get(args(), 3), "8")));
+approve = unwrap_or(list_get(args(), 4), "0");
+
+system = unwrap(read_text("prompts/act.md"));
+ask = call(:u:ask_live, host, model, system);
+decide = if str_eq(approve, "1") {
+  :u:decide_yes
+} else {
+  :u:decide_no
+};
+permissions = {read: "allow", search: "allow", write: "ask", run: "allow"};
+
+print("model:", model);
+print("task:", task);
+print("budget:", budget, "approve writes:", approve);
+
+state = u:loop_initial_state(task, budget);
+while state.done == 0 {
+  if state.iteration >= state.budget {
+    state = u:stopped(state, state.iteration, "budget", "")
+  } else {
+    before = str_len(state.history);
+    state = u:loop_step(state, ask, permissions, decide);
+    if state.done == 0 {
+      print(str_slice(state.history, before, str_len(state.history) - before))
+    } else {
+      0
+    }
+  }
+};
+
+print("");
+print("stopped after", state.iteration, "step(s):", state.reason);
+print(state.answer);
+state.reason

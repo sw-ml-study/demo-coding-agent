@@ -8,8 +8,8 @@ for path in AGENTS.md COPYRIGHT LICENSE README.md justfile \
     docs/plan.md docs/progression.md docs/research.txt docs/sagas.md \
     docs/sw-mlpl-capabilities.md mlplunit.conf examples/tiny-rust-project/Cargo.toml \
     examples/tiny-rust-project/src/lib.rs probes/llm_call_probe.mlpl \
-    agents/v0_read_think.mlpl agents/run_v0.mlpl agents/protocol.mlpl prompts/think.md \
-    assets/mlplcode-logo.png; do
+    agents/v0_read_think.mlpl agents/run_v0.mlpl agents/protocol.mlpl agents/loop.mlpl \
+    agents/run_loop.mlpl agents/model.mlpl prompts/think.md prompts/act.md assets/mlplcode-logo.png; do
     if [ ! -f "$repo_dir/$path" ]; then
         echo "missing required file: $path" >&2
         exit 1

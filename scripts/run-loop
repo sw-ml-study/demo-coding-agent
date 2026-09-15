@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# Opt-in live run of the bounded loop. Never part of `just check`.
+# LOOP_TASK, LOOP_BUDGET (default 8), and LOOP_APPROVE=1 (approve writes) override.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+mlpl=$("$repo_dir/scripts/select-mlpl")
+set -- $("$repo_dir/scripts/check-ollama")
+task=${LOOP_TASK:-Read examples/tiny-rust-project/src/lib.rs and write tests/scratch/NOTES.md with a one-paragraph description of the crate.}
+budget=${LOOP_BUDGET:-8}
+approve=${LOOP_APPROVE:-0}
+
+exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_loop.mlpl" -- "$1" "$2" "$task" "$budget" "$approve"

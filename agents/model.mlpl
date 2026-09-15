@@ -1,0 +1,16 @@
+# Model injection: every agent takes a one-argument ask function; these are the standard ones.
+
+def u:ask_live(host, model, system, prompt) {
+  "Ask a live Ollama model; bind host, model, and system with call() to get a one-argument ask.";
+  llm_call(host, prompt, model, system)
+}
+
+def u:ask_scripted(reply, prompt) {
+  "Return a fixed reply for any prompt; bind reply with call() to get a deterministic ask.";
+  reply
+}
+
+def u:ask_echo(prompt) {
+  "Return the prompt unchanged so a test can inspect exactly what the model would see.";
+  prompt
+}

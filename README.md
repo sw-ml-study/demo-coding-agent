@@ -65,9 +65,9 @@ DONE <summary>
 |---------|-------------------------------------|
 | v0      | READ, THINK (done)                  |
 | v0.5    | action protocol parser (done)       |
-| v1      | READ, SEARCH, THINK                 |
-| v2      | READ, SEARCH, EDIT, TEST            |
-| v3      | repeat until tests pass             |
+| v2      | bounded READ/WRITE loop with allow/ask/deny (done) |
+| v1      | SEARCH via the Rust extension       |
+| v3      | RUN and repeat until tests pass     |
 | v4      | planner, builder, reviewer          |
 | v5      | budgets, compaction, loop detection |
 
@@ -154,10 +154,35 @@ binds the server details into a one-argument partial; tests bind
 prompt. Against `qwen2.5-coder:7b` the fixture crate yields an explanation of
 `add` and a suggested negative-number test.
 
+## Run the bounded loop
+
+```sh
+just loop                  # writes are asked and refused: a dry run
+LOOP_APPROVE=1 just loop   # writes are asked and approved
+```
+
+[`agents/loop.mlpl`](agents/loop.mlpl) is the whole agent as data plus pure
+functions. One state record `{task, iteration, history, files, budget, done,
+reason, answer}` flows through build context, ask model, parse action,
+authorize, execute, update. The model reply is parsed by
+[`agents/protocol.mlpl`](agents/protocol.mlpl); the permission record
+`{read, search, write, run}` maps each tool to `allow`, `ask`, or `deny`; an
+`ask` resolves through an injected decision function, so an unattended run
+never writes. The loop stops with a reason value: `done`, `denied`, or
+`budget`. A malformed reply or a failed builtin becomes an observation the
+model sees on its next turn. `SEARCH` and `RUN` observe "not available yet"
+until Saga 2 supplies the extension. `LOOP_TASK` and `LOOP_BUDGET` override
+the task and the step limit. The system prompt is
+[`prompts/act.md`](prompts/act.md).
+
+Tests drive the loop with a scripted transcript model that picks its reply
+by counting prior actions in the prompt, so every stop reason, the ask
+decision, parse-error recovery, and read errors are proven offline.
+
 ## Tests and probes
 
 ```sh
-just tests        # 41 native mlplunit tests, no model server needed
+just tests        # 51 native mlplunit tests, no model server needed
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 
@@ -169,12 +194,11 @@ will edit lives in `examples/tiny-rust-project`.
 
 ## Current status
 
-Foundation, measured builtins, the v0 read/think agent, and the action
-protocol parser in [`agents/protocol.mlpl`](agents/protocol.mlpl) are
-complete. The [capability ledger](docs/sw-mlpl-capabilities.md) records
-measured rows and eight findings for sw-MLPL, including that `+` does not
-concatenate strings, that an undefined function call reports a misleading
-diagnostic, and that verb dispatch needs nested `if`/`else` chains. The next
-step builds the bounded read/write loop.
+Saga 1 is complete: foundation, measured builtins, the v0 read/think agent,
+the action protocol parser, and the bounded read/write loop with allow, ask,
+and deny permissions, all without Rust. The
+[capability ledger](docs/sw-mlpl-capabilities.md) records measured rows and
+eight findings for sw-MLPL. Saga 2 adds the Rust `agent-tools` extension for
+ripgrep search, allow-listed process execution, and git.
 
 Copyright (c) 2026 Michael A Wright. Distributed under the [MIT License](LICENSE).

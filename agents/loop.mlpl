@@ -1,0 +1,173 @@
+# Bounded coding-agent loop: observe, decide, act, update over one state record.
+include "model.mlpl";
+include "protocol.mlpl";
+
+def u:loop_initial_state(task, budget) {
+  "Fresh state: no history, no files touched, iteration 0, not stopped.";
+  {task: task, iteration: 0, history: "", files: "", budget: budget, done: 0, reason: "", answer: ""}
+}
+
+def u:build_context(state) {
+  "Compose the prompt from task and history; pure so tests can pin the exact text.";
+  str_join(["TASK:", state.task, "", "WORK SO FAR:", state.history, "", "Choose the next action."], "\n")
+}
+
+def u:authorize(action, permissions) {
+  "Pure policy lookup: allow, ask, or deny for the action's tool; done is always allowed.";
+  if str_eq(action.tool, "read") {
+    permissions.read
+  } else {
+    if str_eq(action.tool, "search") {
+      permissions.search
+    } else {
+      if str_eq(action.tool, "write") {
+        permissions.write
+      } else {
+        if str_eq(action.tool, "run") {
+          permissions.run
+        } else {
+          "allow"
+        }
+      }
+    }
+  }
+}
+
+def u:decide_yes(action) {
+  "Approve every ask; used by tests and by LOOP_APPROVE=1.";
+  1
+}
+
+def u:decide_no(action) {
+  "Refuse every ask; the live default so an unattended run never writes.";
+  0
+}
+
+def u:observe_result(result, success_text) {
+  "Render a builtin Result as observation text: the payload or an ERROR line.";
+  if is_ok(result) {
+    success_text
+  } else {
+    str_concat("ERROR: ", err_message(result))
+  }
+}
+
+def u:execute(action) {
+  "Run one authorized action inside the sandbox and return the observation text.";
+  if str_eq(action.tool, "read") {
+    result = read_text(action.path);
+    u:observe_result(result, unwrap_or(result, ""))
+  } else {
+    if str_eq(action.tool, "write") {
+      u:observe_result(write_atomic(action.path, action.body), str_concat("wrote ", action.path))
+    } else {
+      if str_eq(action.tool, "search") {
+        "search is not available yet"
+      } else {
+        if str_eq(action.tool, "run") {
+          "run is not available yet"
+        } else {
+          "no-op"
+        }
+      }
+    }
+  }
+}
+
+def u:touched_path(action) {
+  "The path an action touches, or an empty string.";
+  if str_eq(action.tool, "read") {
+    action.path
+  } else {
+    if str_eq(action.tool, "write") {
+      action.path
+    } else {
+      ""
+    }
+  }
+}
+
+def u:advanced(state, reply, observation, path) {
+  "The next state after an executed action: history grows, files may grow, not stopped.";
+  entry = str_join(["", "", "ACTION:", reply, "", "OBSERVATION:", observation], "\n");
+  files = if str_len(path) == 0 {
+    state.files
+  } else {
+    str_concat(state.files, str_concat(path, "\n"))
+  };
+  {task: state.task, iteration: state.iteration + 1, history: str_concat(state.history, entry), files: files, budget: state.budget, done: 0, reason: "", answer: ""}
+}
+
+def u:stopped(state, iteration, reason, answer) {
+  "A terminal state carrying the stop reason as a value.";
+  {task: state.task, iteration: iteration, history: state.history, files: state.files, budget: state.budget, done: 1, reason: reason, answer: answer}
+}
+
+def u:approved(verdict, action, decide) {
+  "1 when the verdict is allow, or ask and the injected decision says yes.";
+  if str_eq(verdict, "allow") {
+    1
+  } else {
+    if str_eq(verdict, "ask") {
+      call(decide, action)
+    } else {
+      0
+    }
+  }
+}
+
+def u:loop_step(state, ask, permissions, decide) {
+  "One observe, decide, act, update transition; every outcome is a state value.";
+  reply = call(ask, u:build_context(state));
+  parsed = u:parse_action(reply);
+  if is_err(parsed) {
+    u:advanced(state, reply, str_concat("PARSE ERROR: ", err_message(parsed)), "")
+  } else {
+    action = unwrap(parsed);
+    if str_eq(action.tool, "done") {
+      u:stopped(state, state.iteration + 1, "done", action.summary)
+    } else {
+      if u:approved(u:authorize(action, permissions), action, decide) {
+        u:advanced(state, reply, u:execute(action), u:touched_path(action))
+      } else {
+        u:stopped(state, state.iteration + 1, "denied", str_concat("denied: ", reply))
+      }
+    }
+  }
+}
+
+def u:run_loop(task, budget, ask, permissions, decide) {
+  "Run steps until done, denied, or the budget is spent; returns the final state.";
+  state = u:loop_initial_state(task, budget);
+  while state.done == 0 {
+    if state.iteration >= state.budget {
+      state = u:stopped(state, state.iteration, "budget", "")
+    } else {
+      state = u:loop_step(state, ask, permissions, decide)
+    }
+  };
+  state
+}
+
+def u:count_occurrences(s, needle) {
+  "Number of non-overlapping occurrences of needle in s.";
+  count = 0;
+  rest = s;
+  step = str_len(needle);
+  while 1 {
+    at = str_find(rest, needle);
+    if at < 0 {
+      break
+    } else {
+      count = count + 1;
+      rest = str_slice(rest, at + step, str_len(rest))
+    }
+  };
+  count
+}
+
+def u:ask_transcript(replies, prompt) {
+  "Scripted multi-turn model: reply number equals the count of prior ACTION entries in the prompt.";
+  turn = u:count_occurrences(prompt, "\nACTION:\n");
+  unwrap_or(list_get(replies, turn), "DONE transcript exhausted")
+}

@@ -126,9 +126,33 @@ Exit: `just check` passes from a clean checkout; the agent reads and edits a
 file in the example project under test with no Rust code; the capability
 ledger distinguishes supported, awkward, and blocked behavior with evidence.
 
-## Saga 2: mechanisms and permissions
+## Saga 2: the agent codes in MLPL, then mechanisms for Rust
 
-1. Add `extensions/agent-tools` as a Rust `cdylib` on the demo-extensions ABI
+The demo target is an MLPL project, for fun and because it needs no Rust:
+`run_script` already executes an MLPL test file in a fresh environment and
+returns its outcome as data, so "edit, run the tests, repeat" is reachable
+with builtins alone.
+
+1. Add `examples/tiny-mlpl-project` (a `lib.mlpl` with one `u:add` and a
+   mlplunit-style test file) and harden the protocol from live transcripts:
+   tolerate a ``` fence line directly after `WRITE <path>` and directly
+   before `END`, and record each new model habit as a test before handling
+   it. Keep the strict rejections.
+2. Implement `RUN` for MLPL projects in pure MLPL: an allow-list of the
+   form `RUN mlpl tests/test_add.mlpl` that maps to `run_script` with the
+   project root as `source_dir`, returning `status`, `value`, and captured
+   test events as the observation. Anything else stays "not available".
+3. Close the loop on the MLPL target: the agent adds `u:mul` and its test to
+   the example project, runs the tests, and finishes when they pass. Prove
+   it with a scripted transcript and record a live transcript fixture.
+4. Record the VHS demo of that MLPL run. Add `demos/loop.tape` for
+   [VHS](https://github.com/charmbracelet/vhs) that runs `just loop` on the
+   example task and exports GIF and WebP (and MP4 for the README link). The
+   live entry already prints each action and observation as it happens so
+   the recording shows the loop, not a final dump. Keep the tape
+   deterministic where possible: fixed task, fixed budget, `LOOP_APPROVE=1`,
+   and the pinned model.
+5. Add `extensions/agent-tools` as a Rust `cdylib` on the demo-extensions ABI
    and SDK, proven by `sw-checklist`, scoped `cargo test`, and a stock-CLI
    `load_extension` check. First functions: `_agent_tools:search(pattern)`
    over the project root, built on the ripgrep crates (`grep-searcher`,
@@ -136,18 +160,17 @@ ledger distinguishes supported, awkward, and blocked behavior with evidence.
    fallback, and `_agent_tools:run(argv)` against a fixed allow-list
    (`cargo test`, `cargo check`, `cargo clippy`, `cargo fmt`, `git diff`,
    `git status`). The public `agent_tools` facade is MLPL.
-2. Express permissions in MLPL as data: `{read: "allow", search: "allow",
-   write: "ask", test: "allow", git: "ask", shell: "deny"}`. Authorization is
-   a pure function from action plus policy to allow, ask, or deny, tested
-   without a model or a filesystem.
-3. Close the loop: `SEARCH` and `RUN cargo test` reach the extension, the agent
-   iterates until tests pass or the budget is spent, and the example Rust
-   project gains a real unit test through a recorded live run.
-4. Add `git_diff`, `git_status`, and an exact old/new `patch` mechanism so the
-   model edits regions instead of rewriting whole files.
+6. Extend the permission record with `git` and `shell: "deny"`; the
+   allow/ask/deny function from Saga 1 stays the single authorization point.
+7. Close the loop on the Rust target: `SEARCH` and `RUN cargo test` reach the
+   extension and `examples/tiny-rust-project` gains a real unit test through
+   a recorded live run. Add `git_diff`, `git_status`, and an exact old/new
+   `patch` mechanism so the model edits regions instead of rewriting files.
 
-Exit: the agent completes "add a unit test and make it pass" against the
-example project with every OS effect passing through a permission decision.
+Exit: the agent completes "add a function and its test and make it pass"
+against the MLPL example with no Rust, then against the Rust example through
+the extension, every OS effect passing through a permission decision, and a
+recorded VHS demo of the MLPL run is linked from the README.
 
 ## Saga 3: planner, builder, reviewer
 

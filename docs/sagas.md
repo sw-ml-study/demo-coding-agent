@@ -1,6 +1,6 @@
 # Saga queue
 
-## Active: agent loop foundation
+## Completed: agent loop foundation
 
 Install Agentrail process rules; match peer copyright and MIT license; write
 the README, architecture, permissions, progression, capability ledger, and
@@ -9,22 +9,22 @@ probe the builtins an agent depends on, build the one-tool v0 agent, the
 action protocol parser, and the bounded read/write loop, all proven by
 mlplunit with a scripted fake model.
 
-Progress: foundation (001), measured builtins (002), the v0 read/think
-agent (003), and the action protocol parser (004) are done. Forty-one
-mlplunit tests pin the builtin contracts, the v0 flow, and every accepted
-and rejected protocol form; `just v0` ran live against qwen2.5-coder:7b;
-eight sw-MLPL findings are queued in the ledger. Step 005 remains.
+Accepted: `just check` passes from a clean checkout with 51 mlplunit tests;
+`agents/loop.mlpl` reads the fixture crate and writes a file under test with
+no Rust, driven by a scripted transcript model; `done`, `denied`, and
+`budget` stop reasons, the ask decision, parse-error recovery, and read
+errors are all proven offline; `just v0` and `just loop` ran live against
+qwen2.5-coder:7b; the capability ledger classifies every used builtin with
+evidence and queues eight sw-MLPL findings.
 
-Acceptance: `just check` passes from a clean checkout; the agent reads and
-edits a file in `examples/tiny-rust-project` under test without Rust; the
-capability ledger classifies every used builtin with evidence.
+## Next: the agent codes in MLPL, then mechanisms for Rust
 
-## Next: mechanisms and permissions
-
-Add the Rust `agent-tools` extension for search, allow-listed process
-execution, git diff/status, and exact patching; express allow/ask/deny
-permissions as MLPL data; close the loop on "add a unit test and make it
-pass".
+First target an MLPL example project: `RUN` maps to `run_script` in pure
+MLPL, the protocol is hardened from live transcripts (fences, END-less
+bodies), and the agent adds a function plus its test and iterates until the
+tests pass, recorded as a VHS demo. Then add the Rust `agent-tools`
+extension for ripgrep search, allow-listed `cargo`/`git`, and exact patching
+to reach the same result on the Rust example.
 
 ## Future
 
