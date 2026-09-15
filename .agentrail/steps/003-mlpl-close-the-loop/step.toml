@@ -1,9 +1,10 @@
 number = 3
 slug = "mlpl-close-the-loop"
-status = "in-progress"
+status = "completed"
 description = "Close the loop on the MLPL target. Add a just recipe (just mlpl-demo or LOOP_..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T11:58:25"
+completed_at = "2026-09-15T13:05:18"
 task_type = "mlpl-agent"
-commits = []
+commits = ["a414a632a8c7717122c0622d4044ed625349157c"]
