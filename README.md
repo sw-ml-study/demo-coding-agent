@@ -1,6 +1,6 @@
 # demo-coding-agent
 
-<img src="assets/mlplcode-logo.png" alt="mlplcode badge: Software Writer" width="160" align="right">
+<img src="assets/mlplcode-logo.png" alt="mlplcode badge: Software Wrighter" width="160" align="right">
 
 A coding agent small enough to understand, written in sw-MLPL. The tool is
 named **mlplcode**, in the spirit of OpenCode.
