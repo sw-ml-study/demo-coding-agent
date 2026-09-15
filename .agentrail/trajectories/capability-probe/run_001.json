@@ -1,0 +1,11 @@
+{
+  "task_type": "capability-probe",
+  "state": {
+    "number": 2,
+    "step": "measured-builtins"
+  },
+  "action": "Probed each builtin individually with mlpl-repl --source-dir in scratch before writing tests; wrote three mlplunit suites plus symlink fixtures; wired run-tests into just check; run-llm-probe checks /api/tags then runs an MLPL probe; named-file commit and push.",
+  "result": "success",
+  "reward": 1,
+  "timestamp": "2026-09-15T10:49:20"
+}
