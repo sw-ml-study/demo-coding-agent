@@ -83,7 +83,7 @@ def u:test_loop_ask_decision() {
 @test {name: "an exhausted budget stops the loop", tags: ["loop", "budget"]}
 def u:test_loop_budget() {
   "A model that never finishes is cut off after budget steps with reason budget.";
-  ask = call(:u:ask_transcript, ["READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt"]);
+  ask = call(:u:ask_transcript, ["READ tests/fixtures/plain.txt", "READ tests/fixtures/child_ok.mlpl", "READ tests/fixtures/plain.txt", "READ tests/fixtures/child_ok.mlpl"]);
   final = u:run_loop("loop forever", 3, ask, u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(final.reason, "budget", "stop reason")?;
   u:assert_eq(final.iteration, 3, "exactly budget steps")?;
@@ -157,6 +157,50 @@ def u:test_loop_unverified_done_continues() {
   u:assert_eq(final.iteration, 4, "four steps")?;
   u:assert_true(str_find(final.history, "NOT VERIFIED: no file has been written yet") > 0, "first DONE refused")?;
   u:assert_text_eq(final.answer, "now they really pass", "second DONE accepted")
+}
+
+@test {name: "a write to an existing unread file is refused until it is read", tags: ["loop", "guard"]}
+def u:test_loop_read_before_write() {
+  "Blind edit refused with guidance; after a READ the same write goes through; a new file needs no read.";
+  ask = call(:u:ask_transcript, ["WRITE tests/fixtures/plain.txt\nx\nEND", "READ tests/fixtures/plain.txt", "WRITE tests/scratch/guard-new.txt\nnew\nEND", "DONE ok"]);
+  original = unwrap(read_text("tests/fixtures/plain.txt"));
+  final = u:run_loop("edit", 6, ask, u:allow_all(), :u:decide_no, :u:verify_always);
+  u:assert_ok(remove_path("tests/scratch/guard-new.txt"), "cleanup")?;
+  u:assert_text_eq(unwrap(read_text("tests/fixtures/plain.txt")), original, "fixture untouched")?;
+  u:assert_true(str_find(final.history, "read tests/fixtures/plain.txt before writing it") > 0, "guidance observed")?;
+  u:assert_true(str_find(final.history, "wrote tests/scratch/guard-new.txt") > 0, "new file allowed without a read")?;
+  u:assert_text_eq(final.reason, "done", "finished")
+}
+
+@test {name: "a write after reading the file is allowed", tags: ["loop", "guard"]}
+def u:test_loop_write_after_read() {
+  "The guard keys on state.files, so READ then WRITE of the same path executes.";
+  ask = call(:u:ask_transcript, ["READ examples/tiny-mlpl-project/lib.mlpl", "WRITE examples/tiny-mlpl-project/lib.mlpl\n# rewritten\nEND", "DONE ok"]);
+  original = unwrap(read_text("examples/tiny-mlpl-project/lib.mlpl"));
+  final = u:run_loop("edit", 5, ask, u:allow_all(), :u:decide_no, :u:verify_always);
+  write_atomic("examples/tiny-mlpl-project/lib.mlpl", original)?;
+  u:assert_true(str_find(final.history, "wrote examples/tiny-mlpl-project/lib.mlpl") > 0, "write executed")?;
+  u:assert_eq(str_find(final.history, "before writing it"), -1, "no guard message")
+}
+
+@test {name: "an identical reply is flagged once and stops the loop the third time", tags: ["loop", "guard"]}
+def u:test_loop_repeated_action() {
+  "Second identical reply observes REPEATED ACTION without executing; third stops with reason stuck.";
+  ask = call(:u:ask_transcript, ["READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "DONE never reached"]);
+  final = u:run_loop("loop", 6, ask, u:allow_all(), :u:decide_no, :u:verify_always);
+  u:assert_text_eq(final.reason, "stuck", "stop reason")?;
+  u:assert_eq(final.iteration, 3, "three steps")?;
+  u:assert_eq(u:count_occurrences(final.history, "REPEATED ACTION"), 1, "flagged exactly once")?;
+  u:assert_eq(u:count_occurrences(final.history, "alpha\nbeta"), 1, "the read executed only once")
+}
+
+@test {name: "a changed reply resets the repeat count", tags: ["loop", "guard"]}
+def u:test_loop_repeat_reset() {
+  "Alternating replies never trip the guard.";
+  ask = call(:u:ask_transcript, ["READ tests/fixtures/plain.txt", "READ tests/fixtures/child_ok.mlpl", "READ tests/fixtures/plain.txt", "DONE ok"]);
+  final = u:run_loop("alternate", 6, ask, u:allow_all(), :u:decide_no, :u:verify_always);
+  u:assert_text_eq(final.reason, "done", "finished")?;
+  u:assert_eq(str_find(final.history, "REPEATED ACTION"), -1, "never flagged")
 }
 
 u:run_registered_tests()

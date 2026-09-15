@@ -40,6 +40,10 @@ exactly one thing after reading the transcript:
 | 5 | Prompt rewritten as concrete examples: the model copied the example path `src/lib.mlpl` verbatim for every action and exhausted the budget on missing-directory errors | Prompt uses `<path>` placeholders in every example plus one worked WRITE body |
 | 6 | READ lib, WRITE lib with `u:add` kept and `u:mul` added, READ tests, WRITE tests with the includes and both tests, RUN, both passed, DONE | Nothing. The saved transcript is `fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt` |
 
+| 7 | Later `just mlpl-demo` run: skipped both READs, wrote `lib.mlpl` with the prompt's example docstring text copied verbatim, wrote a test file in an invented syntax with `include "lib.mlpl"` (wrong path), and after the RUN failed repeated the identical WRITE and RUN until interrupted | Two loop guards: a WRITE to an existing file this run has not READ is refused with `read <path> before writing it`; an identical reply is flagged `REPEATED ACTION` once and stops the run as `stuck` the third time. The prompt's worked WRITE example became placeholders that cannot be copied as content |
+
+| 8 | With the guards and the de-anchored prompt: one wasted SEARCH (placeholder observation), then read, write, read, write with a fabricated observation inside the reply that the parser dropped, RUN with both tests passing, verified DONE; seven steps | Nothing |
+
 Steps in the successful run: six, the minimum. Protocol mistakes in that
 run: none. One style slip: the `u:mul` test docstring lacks its trailing
 `;`, which MLPL accepts because a newline also separates statements. What the failures taught: a 7B model follows a text protocol

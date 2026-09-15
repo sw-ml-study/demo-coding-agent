@@ -79,6 +79,13 @@ times and stops with `reason` set to `done`, `denied`, or `budget`. Every
 stop reason is a value, not an exception; a malformed reply or a failed
 builtin becomes a `PARSE ERROR:` or `ERROR:` observation for the next turn.
 
+Two guards run before authorization, both pure functions over the state:
+a WRITE to an existing file that this run has not READ is refused with
+`read <path> before writing it` (a new file needs no read); a reply
+identical to the previous one is not executed but observed as
+`REPEATED ACTION`, and a third identical reply stops the run with reason
+`stuck`. The state record carries `last_reply` and `repeats` for this.
+
 DONE is gated. The loop takes an injected `verify(state)` function next to
 `decide`: `u:verify_always` accepts any DONE; `u:verify_tests_passed`
 requires at least one successful WRITE and, after the last WRITE, a RUN

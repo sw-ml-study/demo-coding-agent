@@ -37,7 +37,10 @@ recorded run without VHS; live recipes warm the model first. Step 005 made
 `just loop` interactive: at a terminal the agent asks before each write
 through a FIFO forwarder because sw-MLPL's stdin builtins refuse a TTY
 (ledger F9); the demo script now restores the example on Ctrl-C and keeps
-live transcripts out of the committed fixture unless asked.
+live transcripts out of the committed fixture unless asked. Step 006 added
+the read-before-write and repeated-action guards after a live run edited
+blind and looped on an identical failing write; the next live run finished
+in seven steps.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

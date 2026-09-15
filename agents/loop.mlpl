@@ -5,7 +5,7 @@ include "tools.mlpl";
 
 def u:loop_initial_state(task, budget) {
   "Fresh state: no history, no files touched, iteration 0, not stopped.";
-  {task: task, iteration: 0, history: "", files: "", budget: budget, done: 0, reason: "", answer: ""}
+  {task: task, iteration: 0, history: "", files: "", budget: budget, done: 0, reason: "", answer: "", last_reply: "", repeats: 0}
 }
 
 def u:build_context(state) {
@@ -89,19 +89,24 @@ def u:touched_path(action) {
 }
 
 def u:advanced(state, reply, observation, path) {
-  "The next state after an executed action: history grows, files may grow, not stopped.";
+  "The next state after a step: history grows, files may grow, repeats count identical replies, not stopped.";
   entry = str_join(["", "", "ACTION:", reply, "", "OBSERVATION:", observation], "\n");
   files = if str_len(path) == 0 {
     state.files
   } else {
     str_concat(state.files, str_concat(path, "\n"))
   };
-  {task: state.task, iteration: state.iteration + 1, history: str_concat(state.history, entry), files: files, budget: state.budget, done: 0, reason: "", answer: ""}
+  repeats = if str_eq(reply, state.last_reply) {
+    state.repeats + 1
+  } else {
+    0
+  };
+  {task: state.task, iteration: state.iteration + 1, history: str_concat(state.history, entry), files: files, budget: state.budget, done: 0, reason: "", answer: "", last_reply: reply, repeats: repeats}
 }
 
 def u:stopped(state, iteration, reason, answer) {
   "A terminal state carrying the stop reason as a value.";
-  {task: state.task, iteration: iteration, history: state.history, files: state.files, budget: state.budget, done: 1, reason: reason, answer: answer}
+  {task: state.task, iteration: iteration, history: state.history, files: state.files, budget: state.budget, done: 1, reason: reason, answer: answer, last_reply: state.last_reply, repeats: state.repeats}
 }
 
 def u:last_index(s, needle) {
@@ -163,9 +168,44 @@ def u:approved(verdict, action, decide) {
   }
 }
 
+def u:was_read(state, path) {
+  "1 when path appears in the files touched so far this run.";
+  if str_find(str_concat("\n", state.files), str_join(["\n", path, "\n"], "")) >= 0 {
+    1
+  } else {
+    0
+  }
+}
+
+def u:unread_write(state, action) {
+  "1 when the action writes an existing file that this run has not read: the model is editing blind.";
+  if str_eq(action.tool, "write") {
+    if u:was_read(state, action.path) {
+      0
+    } else {
+      is_ok(read_text(action.path))
+    }
+  } else {
+    0
+  }
+}
+
 def u:loop_step(state, ask, permissions, decide, verify) {
   "One observe, decide, act, update transition; every outcome is a state value.";
   reply = call(ask, u:build_context(state));
+  if str_eq(reply, state.last_reply) {
+    if state.repeats >= 1 {
+      u:stopped(state, state.iteration + 1, "stuck", "the same action was sent three times in a row")
+    } else {
+      u:advanced(state, reply, "REPEATED ACTION: same as the previous step; change your approach", "")
+    }
+  } else {
+    u:loop_step_fresh(state, reply, permissions, decide, verify)
+  }
+}
+
+def u:loop_step_fresh(state, reply, permissions, decide, verify) {
+  "Handle a reply that differs from the previous one: parse, guard, authorize, execute.";
   parsed = u:parse_action(reply);
   if is_err(parsed) {
     u:advanced(state, reply, str_concat("PARSE ERROR: ", err_message(parsed)), "")
@@ -179,10 +219,14 @@ def u:loop_step(state, ask, permissions, decide, verify) {
         u:advanced(state, reply, str_concat("NOT VERIFIED: ", err_message(evidence)), "")
       }
     } else {
-      if u:approved(u:authorize(action, permissions), action, decide) {
-        u:advanced(state, reply, u:execute(action), u:touched_path(action))
+      if u:unread_write(state, action) {
+        u:advanced(state, reply, str_join(["read ", action.path, " before writing it"], ""), "")
       } else {
-        u:stopped(state, state.iteration + 1, "denied", str_concat("denied: ", reply))
+        if u:approved(u:authorize(action, permissions), action, decide) {
+          u:advanced(state, reply, u:execute(action), u:touched_path(action))
+        } else {
+          u:stopped(state, state.iteration + 1, "denied", str_concat("denied: ", reply))
+        }
       }
     }
   }

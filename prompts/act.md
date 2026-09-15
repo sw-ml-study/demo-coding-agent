@@ -19,12 +19,9 @@ DONE <one-line summary>
 Shape of a WRITE, with the body's last line followed by END:
 
 WRITE <path>
-# Module comment.
-
-def u:example(a, b) {
-  "Docstring ends with a semicolon.";
-  a + b
-}
+<first line of the file>
+<every other line of the file, exactly as it should be saved>
+<last line of the file>
 END
 
 Rules:
@@ -32,6 +29,9 @@ Rules:
 - Paths are relative to the project root; never use .. or a leading /.
 - Never write OBSERVATION, ERROR, or a result yourself; stop after your
   action and wait for the system.
+- READ a file before you WRITE it; a write to an unread file is refused.
 - When rewriting a file you have read, keep every unchanged line exactly,
-  including comments, def, docstrings, and the ; after a docstring.
+  including comments, def, docstrings, and the ; after a docstring. Never
+  copy text from these instructions into a file.
+- Never send the same action twice in a row; if an action failed, change it.
 - Reply DONE only after a RUN observation showed status: ok.
