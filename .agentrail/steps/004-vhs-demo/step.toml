@@ -1,9 +1,10 @@
 number = 4
 slug = "vhs-demo"
-status = "in-progress"
+status = "completed"
 description = "Record the VHS demo of the MLPL close-the-loop run. Add demos/loop.tape for c..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T11:58:25"
+completed_at = "2026-09-15T14:38:30"
 task_type = "demo-recording"
-commits = []
+commits = ["6fcff445be5f68946984a10d0ea3b0adbd84f888"]
