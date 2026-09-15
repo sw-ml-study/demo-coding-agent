@@ -18,4 +18,14 @@ if ! printf '%s' "$tags" | grep -q "\"name\":\"$model\""; then
     exit 1
 fi
 
+# Load the model now so the first llm_call is not the one that pays the
+# cold-start cost (tens of seconds on a 7B model), and report how long it took.
+start=$(date +%s)
+curl -sf -m 300 "$host/api/generate" -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$model\",\"prompt\":\"\",\"keep_alive\":\"15m\"}" >/dev/null 2>&1 || {
+    echo "model $model did not load at $host within 300s" >&2
+    exit 1
+}
+echo "model $model ready at $host in $(( $(date +%s) - start ))s" >&2
+
 printf '%s\n%s\n' "$host" "$model"

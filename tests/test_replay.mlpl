@@ -1,0 +1,32 @@
+# Prove the transcript replay reproduces the live run through the real loop and restores the example.
+include "agents/replay_loop.mlpl";
+
+@test {name: "replies are extracted from the saved transcript", tags: ["replay"]}
+def u:test_transcript_replies() {
+  "Six recorded actions in order, with WRITE bodies intact.";
+  replies = u:transcript_replies(unwrap(read_text("fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt")));
+  u:assert_true(list_len(replies) >= 5, "at least five replies")?;
+  u:assert_text_eq(unwrap(list_get(replies, 0)), "READ examples/tiny-mlpl-project/lib.mlpl", "first reply")?;
+  second = unwrap(list_get(replies, 1));
+  u:assert_eq(str_find(second, "WRITE examples/tiny-mlpl-project/lib.mlpl"), 0, "second is the library write")?;
+  u:assert_true(str_find(second, "\nEND") > 0, "write body keeps END")
+}
+
+@test {name: "the replay reproduces the live outcome and restores the example", tags: ["replay", "close-loop"]}
+def u:test_replay_reproduces_live_run() {
+  "Real parser, writes, and run_script driven by recorded replies: verified done with both tests passing.";
+  lib = "examples/tiny-mlpl-project/lib.mlpl";
+  tests = "examples/tiny-mlpl-project/tests/test_add.mlpl";
+  original_lib = unwrap(read_text(lib));
+  original_tests = unwrap(read_text(tests));
+  ask = u:replay_ask("fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt");
+  final = u:run_loop("replay", 12, ask, {read: "allow", search: "allow", write: "allow", run: "allow"}, :u:decide_yes, :u:verify_tests_passed);
+  write_atomic(lib, original_lib)?;
+  write_atomic(tests, original_tests)?;
+  u:assert_text_eq(final.reason, "done", "verified done")?;
+  u:assert_true(str_find(final.history, "passed: mul multiplies two numbers") > 0, "mul test passed")?;
+  u:assert_eq(str_find(final.history, "NOT VERIFIED"), -1, "no unverified DONE")?;
+  u:assert_text_eq(unwrap(read_text(lib)), original_lib, "library restored")
+}
+
+u:run_registered_tests()

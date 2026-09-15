@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+# Opt-in: record the replay demo with VHS into assets/demo. Never part of
+# `just check`. Selects existing tools only; installs nothing. Pass a tape
+# path to record another tape (e.g. demos/loop-live.tape, needs Ollama).
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+tape=${1:-demos/loop.tape}
+
+command -v vhs >/dev/null 2>&1 || {
+    echo "vhs is not installed; see https://github.com/charmbracelet/vhs" >&2
+    exit 1
+}
+
+cd "$repo_dir"
+mkdir -p assets/demo
+vhs validate "$tape"
+vhs "$tape"
+
+gif=$(sed -n 's/^Output \(.*\.gif\)$/\1/p' "$tape" | head -1)
+if command -v gifsicle >/dev/null 2>&1; then
+    gifsicle -O3 --colors 32 --lossy=40 "$gif" -o "$gif"
+else
+    echo "gifsicle not found; GIF left unoptimised" >&2
+fi
+
+ls -la assets/demo

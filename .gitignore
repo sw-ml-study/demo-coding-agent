@@ -23,3 +23,8 @@
 .DS_Store
 *.swp
 *~
+
+# Recorded demos: demos/*.tape are source and tracked; only the README's
+# assets/demo/loop.gif is tracked (re-record deliberately with just demo-tape).
+/assets/demo/*
+!/assets/demo/loop.gif

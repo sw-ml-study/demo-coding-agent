@@ -1,0 +1,64 @@
+# Replay a saved live transcript through the real loop: recorded model replies, real parser, writes, and test runs.
+include "loop.mlpl";
+
+def u:strip_trailing_newlines(s) {
+  "Drop trailing newline characters; u:rtrim leaves them alone.";
+  n = str_len(s);
+  while n > 0 {
+    if str_eq(str_slice(s, n - 1, 1), "\n") {
+      n = n - 1
+    } else {
+      break
+    }
+  };
+  str_slice(s, 0, n)
+}
+
+def u:transcript_replies(text) {
+  "Extract the model replies from a saved transcript: the text between each ACTION: header and its OBSERVATION: header.";
+  entries = str_split(text, "\nACTION:\n");
+  n = list_len(entries);
+  i = 1;
+  joined = "";
+  while i < n {
+    entry = unwrap(list_get(entries, i));
+    cut = str_find(entry, "\nOBSERVATION:\n");
+    raw = if cut < 0 {
+      entry
+    } else {
+      str_slice(entry, 0, cut)
+    };
+    reply = u:strip_trailing_newlines(u:rtrim(raw));
+    joined = if i == 1 {
+      reply
+    } else {
+      str_join([joined, reply], "\n<<<REPLY>>>\n")
+    };
+    i = i + 1
+  };
+  str_split(joined, "\n<<<REPLY>>>\n")
+}
+
+def u:final_reply(text) {
+  "The DONE line a saved transcript ended with, rebuilt from its stopped-after summary line.";
+  at = str_find(text, "\nstopped after ");
+  if at < 0 {
+    "DONE replay finished"
+  } else {
+    tail = str_slice(text, at + 1, str_len(text) - at - 1);
+    lines = str_split(tail, "\n");
+    if list_len(lines) > 1 {
+      str_concat("DONE ", unwrap(list_get(lines, 1)))
+    } else {
+      "DONE replay finished"
+    }
+  }
+}
+
+def u:replay_ask(transcript_path) {
+  "A scripted model built from a transcript fixture: its recorded replies, then its recorded DONE.";
+  text = unwrap(read_text(transcript_path));
+  replies = u:transcript_replies(text);
+  all = str_join([str_join(replies, "\n<<<REPLY>>>\n"), u:final_reply(text)], "\n<<<REPLY>>>\n");
+  call(:u:ask_transcript, str_split(all, "\n<<<REPLY>>>\n"))
+}

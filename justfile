@@ -48,6 +48,18 @@ loop:
 mlpl-demo:
     ./scripts/run-mlpl-demo
 
+# Replay the saved live transcript through the real loop with typewriter pacing; no model server needed.
+replay:
+    ./scripts/run-replay
+
+# Opt-in: record the live MLPL coding demo with VHS into assets/demo (gif, mp4, webm, webp).
+demo-tape:
+    ./scripts/record-demo
+
+# Prove the committed transcript replays to a verified done and restores the example.
+replay-check:
+    ./scripts/check-replay
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

@@ -49,11 +49,27 @@ failure and the verifier is what makes the demo honest.
 
 ## Demo recording
 
-The agent is a plain CLI (`just loop`), so a
-[VHS](https://github.com/charmbracelet/vhs) tape can record a run and export
-GIF, WebP, or MP4 for the README. That is planned for the end of Saga 2,
-when `RUN cargo test` works and the recording shows the agent adding a test
-and making it pass rather than only reading and writing.
+`demos/loop.tape` records `just replay`: `agents/replay_loop.mlpl` extracts
+the model replies from the saved live transcript and feeds them to the real
+loop, so the parser, the writes, and the `run_script` test run are live
+while the model is deterministic. The tape needs no Ollama and finishes in
+seconds. `demos/loop-live.tape` records `just mlpl-demo` with a real model.
+
+Why a replay, and why fixed sleeps: the first live recording had VHS wait
+fifteen minutes for a marker that never matched. The cause was using
+`Wait+Screen /regex/` at all. In VHS 0.11 it matched the typed command line
+(a tape waiting for `MARKER` returned before any output appeared), and when
+the regex could only match program output it saw a stale screen and timed
+out, while the GIF frames captured the run correctly. The sibling
+`../sw-os-ml` tapes never use `Wait`; they `Sleep` a fixed time after
+`Enter`, and that records the whole run. The replay is deterministic and
+takes a few seconds, so a fixed sleep is exact; the live tape sleeps eight
+minutes, which covers a warm model at a budget of twelve steps but not a
+cold one, so `scripts/check-ollama` loads the model before the tape starts
+and reports the load time. The gate's `scripts/check-replay` proves the
+same run the GIF shows: six steps, both tests passed, verified done, and
+the example restored. WebP was measured at 135% of the optimised GIF, as the sibling
+also found, so only the GIF is committed.
 
 ## The smallest possible first proof
 

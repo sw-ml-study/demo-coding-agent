@@ -1,6 +1,6 @@
 number = 4
 slug = "vhs-demo"
-status = "pending"
+status = "in-progress"
 description = "Record the VHS demo of the MLPL close-the-loop run. Add demos/loop.tape for c..."
 role = "production"
 context_files = []

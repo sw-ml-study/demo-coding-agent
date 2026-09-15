@@ -101,7 +101,10 @@ ollama pull qwen2.5-coder:7b
 
 The 7B coder model is the floor: it fits an RTX 3060 12 GB or a 16 GB
 unified-memory Mac with room for context, and it keeps to the one-action
-protocol. On smaller machines `qwen2.5-coder:1.5b` runs anywhere but drifts
+protocol. Every live recipe first loads the model through the Ollama API and
+prints how long that took, allowing up to five minutes for a cold start, so
+the first real `llm_call` never pays it; each call is then bounded by
+`llm_call`'s own 120-second timeout. On smaller machines `qwen2.5-coder:1.5b` runs anywhere but drifts
 out of the protocol more often. Bigger cards can point the same variable at
 a 14B or 32B model. `just check` never contacts a model server, so a fork
 without a GPU still gets a green gate.
@@ -183,6 +186,16 @@ decision, parse-error recovery, and read errors are proven offline.
 
 ## Watch it code
 
+![mlplcode adding u:mul and a passing test to the MLPL example, recorded with VHS](assets/demo/loop.gif)
+
+*Six steps: read, write, read, write, run, done. The model replies are
+replayed from the saved live `qwen2.5-coder:7b` transcript; the parser, the
+file writes, and the test run happen for real. Recorded with
+[VHS](https://github.com/charmbracelet/vhs) from `demos/loop.tape`;
+`just replay` plays it in any terminal without a model server and `just
+demo-tape` re-records it (an MP4 is produced alongside but not committed).
+`demos/loop-live.tape` records a fresh live run instead.*
+
 ```sh
 just mlpl-demo
 ```
@@ -200,7 +213,8 @@ attempts it took to get here, and what each one changed, are in
 ## Tests and probes
 
 ```sh
-just tests        # 71 native mlplunit tests, no model server needed
+just tests        # 73 native mlplunit tests, no model server needed
+just replay-check # the committed transcript replays to a verified done
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 

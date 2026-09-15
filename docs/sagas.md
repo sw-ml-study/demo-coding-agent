@@ -27,7 +27,13 @@ pure MLPL: an allow-list function, `run_script` with captured events, and a
 rendered observation with one line per finished test. Step 003 closed the
 loop live: after six attempts (fabricated observations, fence habits, false
 DONE) the loop gained verified completion and `qwen2.5-coder:7b` added
-`u:mul` with a passing test in six steps; the transcript is a fixture.
+`u:mul` with a passing test in six steps; the transcript is a fixture. Step
+004 recorded that run with VHS into `assets/demo/` and linked the GIF from
+the README: `demos/loop.tape` replays the saved transcript through the real
+loop (`just replay`, no model server), `demos/loop-live.tape` records a
+fresh live run. Fixed sleeps replaced VHS `Wait`, which matched the typed
+command or saw a stale screen; `just replay-check` in the gate proves the
+recorded run without VHS; live recipes warm the model first.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

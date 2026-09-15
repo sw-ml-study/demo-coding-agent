@@ -1,0 +1,33 @@
+# Replay entry: mlpl-repl --source-dir <repo> -f agents/run_replay.mlpl -- TRANSCRIPT [TASK] [BUDGET]
+include "replay_loop.mlpl";
+
+transcript = unwrap_or(list_get(args(), 0), "fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt");
+task = unwrap_or(list_get(args(), 1), "Add u:mul(a, b) to examples/tiny-mlpl-project/lib.mlpl with a test in tests/test_add.mlpl, run the tests, finish when they pass.");
+budget = unwrap(to_number(unwrap_or(list_get(args(), 2), "12")));
+
+ask = u:replay_ask(transcript);
+permissions = {read: "allow", search: "allow", write: "allow", run: "allow"};
+
+print("mlplcode replay: model replies from", transcript);
+print("parser, file writes, and test runs are live");
+print("task:", task);
+
+state = u:loop_initial_state(task, budget);
+while state.done == 0 {
+  if state.iteration >= state.budget {
+    state = u:stopped(state, state.iteration, "budget", "")
+  } else {
+    before = str_len(state.history);
+    state = u:loop_step(state, ask, permissions, :u:decide_yes, :u:verify_tests_passed);
+    if state.done == 0 {
+      print(str_slice(state.history, before, str_len(state.history) - before))
+    } else {
+      0
+    }
+  }
+};
+
+print("");
+print("stopped after", state.iteration, "step(s):", state.reason);
+print(state.answer);
+state.reason

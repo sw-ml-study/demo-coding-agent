@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+# Gate check: the committed transcript replays through the real loop to a
+# verified DONE with both tests passing, and the example project is left
+# pristine. This is what the README demo records, proven without VHS.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+out=$(REPLAY_DELAY=0 "$repo_dir/scripts/run-replay" 2>&1) || {
+    printf '%s\n' "$out" | tail -20 >&2
+    echo "replay exited non-zero" >&2
+    exit 1
+}
+for needle in "passed: add sums two numbers" "passed: mul multiplies two numbers" \
+    "stopped after 6 step(s): done" "mlplcode replay complete"; do
+    printf '%s\n' "$out" | grep -qF "$needle" || {
+        echo "replay output missing: $needle" >&2
+        printf '%s\n' "$out" | tail -20 >&2
+        exit 1
+    }
+done
+printf '%s\n' "$out" | grep -q "NOT VERIFIED\|PARSE ERROR" && {
+    echo "replay had an unverified DONE or a parse error" >&2
+    exit 1
+}
+if [ -n "$(git -C "$repo_dir" status --short -- examples/tiny-mlpl-project)" ]; then
+    echo "example project not restored after replay" >&2
+    exit 1
+fi
+echo "replay: six steps, both tests passed, verified done, example restored"
