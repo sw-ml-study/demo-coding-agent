@@ -59,6 +59,8 @@ DONE <summary>
 | v5      | budgets, compaction, loop detection |
 
 See [progression](docs/progression.md) for what is deliberately postponed.
+There is no TUI in the plan: once the agent works, the front end is an org
+file in Emacs using sw-MLPL's existing org-babel backend.
 
 ## Prerequisites
 

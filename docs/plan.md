@@ -180,8 +180,17 @@ Exit: the agent fails loudly and cheaply on a task it cannot finish.
    history) into a handoff for `demo-mlpl-libraries` once three agents use them.
 3. Record sw-MLPL findings, especially where tagged sum values or `match`
    would have simplified the dispatch, as classified capability notes.
+4. Add an Emacs front end instead of a TUI, once a working agent exists.
+   sw-MLPL already ships `elisp/ob-mlpl.el` (org-babel `#+begin_src mlpl`)
+   and `mlpl-org.el`, so a task, its agent run, and the resulting transcript
+   can live in one org file: the task in a source block, `C-c C-c` runs the
+   loop, observations and the diff fold into results blocks. Keep the agent
+   ignorant of Emacs; the integration is an org document plus the existing
+   babel backend, with at most a thin elisp helper for approving `ask`
+   actions.
 
-Exit: another MLPL repository can reuse the agent core without copying it.
+Exit: another MLPL repository can reuse the agent core without copying it,
+and a reader can drive one task end to end from an org file.
 
 ## Cross-cutting gates
 
@@ -199,8 +208,9 @@ Exit: another MLPL repository can reuse the agent core without copying it.
 
 ## Non-goals
 
-- A TUI, MCP, streaming, session persistence, embeddings or RAG, LSP, GitHub
-  integration, or multi-agent concurrency. Multiple providers are postponed,
+- A TUI (Emacs via the existing org-babel backend is the planned front end
+  instead), MCP, streaming, session persistence, embeddings or RAG, LSP,
+  GitHub integration, or multi-agent concurrency. Multiple providers are postponed,
   not excluded: an OpenAI-compatible endpoint is the one planned addition.
 - A generic `shell()` builtin or arbitrary command execution.
 - Automatic context compaction before a measured budget problem exists.
