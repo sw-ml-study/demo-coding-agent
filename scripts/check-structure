@@ -9,7 +9,7 @@ for path in AGENTS.md COPYRIGHT LICENSE README.md justfile \
     docs/sw-mlpl-capabilities.md mlplunit.conf examples/tiny-rust-project/Cargo.toml \
     examples/tiny-rust-project/src/lib.rs probes/llm_call_probe.mlpl \
     agents/v0_read_think.mlpl agents/run_v0.mlpl agents/protocol.mlpl agents/loop.mlpl \
-    agents/run_loop.mlpl agents/model.mlpl prompts/think.md prompts/act.md assets/mlplcode-logo.png \
+    agents/run_loop.mlpl agents/model.mlpl agents/tools.mlpl prompts/think.md prompts/act.md assets/mlplcode-logo.png \
     examples/tiny-mlpl-project/lib.mlpl examples/tiny-mlpl-project/tests/test_add.mlpl \
     examples/tiny-mlpl-project/vendor/mlplunit.mlpl examples/tiny-mlpl-project/vendor/VENDOR.md; do
     if [ ! -f "$repo_dir/$path" ]; then

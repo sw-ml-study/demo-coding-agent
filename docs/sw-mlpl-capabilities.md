@@ -19,7 +19,7 @@ builtin nor an extension can express it; needs a probe before any request).
 | write a whole file                    | `write_text`, `write_atomic`               | measured   | create, replace, read back, `remove_path`; missing parent directory is an `err` (see findings) |
 | file metadata                         | `file_metadata(path)`                      | measured   | `{kind, size, modified_unix_ms}` |
 | sandbox confinement                   | `--source-dir` root                        | measured   | `../` and an outside-target symlink give `err("...: outside the sandbox")` for read and write; an inside-target symlink is readable (see findings) |
-| run an MLPL script as a child         | `run_script(path, opts)`                   | measured   | `tests/test_run_script.mlpl`: `{status, value, value_raw, error, events, events_kind}`; child `err` is `status: "err"`; MLPL only, not a process runner |
+| run an MLPL script as a child         | `run_script(path, opts)`                   | measured   | `tests/test_run_script.mlpl`, `tests/test_tools.mlpl`: `{status, value, value_raw, error, events, events_kind}`; a failing mlplunit-style file is `status: "err"`; `capture: 1` events parse with `parse_json` into `{kind, name, status, diagnostic}`; MLPL only, not a process runner |
 | prefix-parse an action line           | `str_find`, `str_slice`, `str_split`, `str_eq`, `str_len`, `list_len`, `list_get` | measured | `tests/test_string_protocol.mlpl`; no `str_starts_with` or `str_trim` exist, prefix is `str_find(s, verb) == 0` |
 | join observations                     | `str_concat(a, b)`, `str_join(parts, sep)` | measured   | `+` on two strings is an error (see findings); `str_join([], sep)` is `""` |
 | inject a fake model                   | `:u:` references, `call` partials          | measured   | `tests/test_v0_read_think.mlpl`: a three-argument partial of `u:ask_live` and a one-argument partial of `u:ask_scripted` both invoke with `call(ask, prompt)` |
@@ -30,6 +30,23 @@ builtin nor an extension can express it; needs a probe before any request).
 | exact old/new patch                   | `read_text` + `str_find` + `write_atomic`  | supported  | pure MLPL; no extension planned |
 | streaming or native tool calling      | none                                       | non-goal   | text protocol by design |
 | OpenAI-compatible chat endpoint       | none; `llm_call` speaks Ollama `/api/generate` only (`contracts/eval-contract/llm-call.md`) | extension or upstream | planned so any hosted model can drive the loop; an HTTP POST from the `agent-tools` extension is the first candidate, an `llm_call` wire-format option the upstream alternative |
+
+## Upstream status (2026-09-15)
+
+The sw-mlpl maintainer agent has F1 through F5 captured and queued, not yet
+implemented, and intends to lead a demo-coding-agent fix saga with F2 (the
+misleading unknown-function diagnostic) because it makes every other
+missing-builtin guess self-explanatory. Until then this repository keeps its
+workarounds: `str_concat`/`str_join` for F1, `list_len` for F5, flat file
+layouts for F4, nothing needed for F3. Fixes are being developed in
+parallel; re-measure the affected tests when the adjacent binary changes.
+
+Shipped upstream this session and available if needed, none required by the
+CLI plus `run_script` path this agent uses today: `include` over the wire
+(an includes map on the eval request), a `--fs-root` server sandbox for byte
+file builtins, `args` on the eval request, `reset_optimizer()`, and clean
+errors instead of panics on shape, label, matmul, and out-of-range `take`
+mistakes in generated programs.
 
 ## Findings queue
 

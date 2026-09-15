@@ -1,0 +1,79 @@
+# RUN mechanism for MLPL projects in pure MLPL: an argv allow-list and run_script rendered as an observation.
+
+def u:run_refused(argv) {
+  "The observation for a command outside the allow-list; nothing is executed.";
+  err(str_concat("run: command not allowed: ", str_join(argv, " ")))
+}
+
+def u:run_allowed(argv) {
+  "ok(path) only when argv is exactly mlpl <relative path> with a safe path; err otherwise.";
+  if list_len(argv) == 2 {
+    if str_eq(unwrap(list_get(argv, 0)), "mlpl") {
+      path = unwrap(list_get(argv, 1));
+      if is_ok(u:validate_path(path)) {
+        ok(path)
+      } else { u:run_refused(argv) }
+    } else {
+      u:run_refused(argv)
+    }
+  } else {
+    u:run_refused(argv)
+  }
+}
+
+def u:render_event(line) {
+  "One captured test event as a short line; only test_end events are rendered, others give an empty string.";
+  parsed = parse_json(line);
+  if is_err(parsed) {
+    ""
+  } else {
+    e = unwrap(parsed);
+    if str_eq(e.kind, "test_end") {
+      if str_eq(e.status, "failed") {
+        str_join(["failed: ", e.name, " -- ", e.diagnostic], "")
+      } else {
+        str_join([e.status, ": ", e.name], "")
+      }
+    } else {
+      ""
+    }
+  }
+}
+
+def u:render_run(outcome) {
+  "Observation text for a run_script outcome: status, value, error if any, then one line per finished test.";
+  lines = str_join(["status: ", outcome.status, "\n", "value: ", outcome.value], "");
+  lines = if str_len(outcome.error) > 0 {
+    str_join([lines, "\n", "error: ", outcome.error], "")
+  } else {
+    lines
+  };
+  n = list_len(outcome.events);
+  i = 0;
+  while i < n {
+    rendered = u:render_event(unwrap(list_get(outcome.events, i)));
+    lines = if str_len(rendered) > 0 {
+      str_join([lines, "\n", rendered], "")
+    } else {
+      lines
+    };
+    i = i + 1
+  };
+  lines
+}
+
+def u:run_mlpl(path) {
+  "Execute one MLPL file inside the sandbox through run_script and render the outcome.";
+  result = run_script(path, {source_dir: ".", capture: 1});
+  if is_ok(result) { u:render_run(unwrap(result)) } else {
+    str_concat("ERROR: ", err_message(result))
+  }
+}
+
+def u:run_tool(argv) {
+  "Apply the allow-list, then run; a refused command is an observation, never an execution.";
+  allowed = u:run_allowed(argv);
+  if is_ok(allowed) { u:run_mlpl(unwrap(allowed)) } else {
+    err_message(allowed)
+  }
+}

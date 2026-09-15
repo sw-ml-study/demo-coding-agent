@@ -22,7 +22,9 @@ evidence and queues eight sw-MLPL findings.
 Progress: step 001 added `examples/tiny-mlpl-project` (runs under
 `run_script` with captured PASS events via the vendored mlplunit library)
 and hardened the protocol against fenced WRITE bodies with tests for each
-habit and for the strict rejections.
+habit and for the strict rejections. Step 002 made `RUN mlpl <path>` real in
+pure MLPL: an allow-list function, `run_script` with captured events, and a
+rendered observation with one line per finished test.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

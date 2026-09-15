@@ -1,0 +1,67 @@
+# Prove the pure-MLPL RUN mechanism: allow-list, run_script execution, and rendered observations.
+include "agents/loop.mlpl";
+
+@test {name: "run_allowed accepts exactly mlpl plus a safe relative path", tags: ["run", "allow-list"]}
+def u:test_run_allowed_ok() {
+  "The only allowed shape today.";
+  r = u:run_allowed(["mlpl", "examples/tiny-mlpl-project/tests/test_add.mlpl"]);
+  u:assert_ok(r, "allowed")?;
+  u:assert_text_eq(unwrap(r), "examples/tiny-mlpl-project/tests/test_add.mlpl", "path returned")
+}
+
+@test {name: "run_allowed refuses everything else by name", tags: ["run", "allow-list"]}
+def u:test_run_allowed_refusals() {
+  "Other programs, wrong arity, traversal, and absolute paths are all refused with the command named.";
+  r = u:run_allowed(["cargo", "test"]);
+  u:assert_err(r, "cargo")?;
+  u:assert_text_eq(err_message(r), "run: command not allowed: cargo test", "message names the command")?;
+  u:assert_err(u:run_allowed(["mlpl"]), "no path")?;
+  u:assert_err(u:run_allowed(["mlpl", "a.mlpl", "b.mlpl"]), "extra word")?;
+  u:assert_err(u:run_allowed(["mlpl", "../x.mlpl"]), "traversal")?;
+  u:assert_err(u:run_allowed(["mlpl", "/etc/x.mlpl"]), "absolute")?;
+  u:assert_err(u:run_allowed(["sh", "-c", "mlpl x"]), "shell")
+}
+
+@test {name: "run_tool renders a passing test file", tags: ["run", "observe"]}
+def u:test_run_tool_passing() {
+  "The example project's tests observe status ok and one passed line.";
+  obs = u:run_tool(["mlpl", "examples/tiny-mlpl-project/tests/test_add.mlpl"]);
+  u:assert_eq(str_find(obs, "status: ok"), 0, "status first")?;
+  u:assert_true(str_find(obs, "passed: add sums two numbers") > 0, "passed line")?;
+  u:assert_eq(str_find(obs, "failed:"), -1, "no failures")
+}
+
+@test {name: "run_tool renders a failing test file with its diagnostic", tags: ["run", "observe"]}
+def u:test_run_tool_failing() {
+  "A failure shows status err, the passing test, and the failing test with the assertion message.";
+  obs = u:run_tool(["mlpl", "tests/fixtures/mlpl-failing/failing_suite.mlpl"]);
+  u:assert_eq(str_find(obs, "status: err"), 0, "status err")?;
+  u:assert_true(str_find(obs, "passed: one passes") > 0, "passing line")?;
+  u:assert_true(str_find(obs, "failed: one fails -- ") > 0, "failing line")?;
+  u:assert_true(str_find(obs, "different") > 0, "assertion message present")
+}
+
+@test {name: "run_tool reports a missing file as an ERROR observation", tags: ["run", "error"]}
+def u:test_run_tool_missing() {
+  "A bad path is an observation the model can react to, not a crash.";
+  obs = u:run_tool(["mlpl", "tests/fixtures/mlpl-failing/nope.mlpl"]);
+  u:assert_eq(str_find(obs, "ERROR: "), 0, "error prefix")?;
+  u:assert_true(str_find(obs, "No such file") > 0, "reason")
+}
+
+@test {name: "run_tool refuses a disallowed command as an observation", tags: ["run", "allow-list"]}
+def u:test_run_tool_refused() {
+  "The refusal text is the observation.";
+  u:assert_text_eq(u:run_tool(["cargo", "test"]), "run: command not allowed: cargo test", "refusal observed")
+}
+
+@test {name: "render_event shows only finished tests", tags: ["run", "observe"]}
+def u:test_render_event() {
+  "test_start and malformed lines render empty; passed and failed render one line.";
+  u:assert_text_eq(u:render_event("{\"kind\":\"test_start\",\"name\":\"x\"}"), "", "start hidden")?;
+  u:assert_text_eq(u:render_event("not json"), "", "malformed hidden")?;
+  u:assert_text_eq(u:render_event("{\"kind\":\"test_end\",\"name\":\"x\",\"status\":\"passed\"}"), "passed: x", "passed")?;
+  u:assert_text_eq(u:render_event("{\"kind\":\"test_end\",\"name\":\"x\",\"status\":\"failed\",\"diagnostic\":\"boom\"}"), "failed: x -- boom", "failed")
+}
+
+u:run_registered_tests()

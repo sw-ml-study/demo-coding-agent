@@ -1,6 +1,7 @@
 # Bounded coding-agent loop: observe, decide, act, update over one state record.
 include "model.mlpl";
 include "protocol.mlpl";
+include "tools.mlpl";
 
 def u:loop_initial_state(task, budget) {
   "Fresh state: no history, no files touched, iteration 0, not stopped.";
@@ -65,7 +66,7 @@ def u:execute(action) {
         "search is not available yet"
       } else {
         if str_eq(action.tool, "run") {
-          "run is not available yet"
+          u:run_tool(action.argv)
         } else {
           "no-op"
         }

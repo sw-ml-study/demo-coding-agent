@@ -31,20 +31,31 @@ filesystem. The measured record has one field per tool: `{read, search,
 write, run}`; `done` is always allowed. `git` and `shell` fields arrive with
 the extension in Saga 2.
 
-## Initial allow-list for `RUN`
+## Allow-list for `RUN`
+
+Today, in pure MLPL (`agents/tools.mlpl`):
 
 ```text
-cargo test *
-cargo check *
-cargo clippy *
-cargo fmt *
-git diff *
-git status *
+mlpl <relative path>      run_script(path, {source_dir: ".", capture: 1})
 ```
 
-The allow-list is matched on the argv prefix after splitting on whitespace,
-never by handing the line to `/bin/sh -c`. Anything else is a deny, and the
-denial is recorded as an observation so the model can choose differently.
+`u:run_allowed(argv)` accepts exactly two words, the first `mlpl`, the second
+a path that passes the same validation as READ and WRITE. The observation
+is the child's status, its final value, any error, and one line per
+finished test parsed from the captured events (`passed: name`,
+`failed: name -- diagnostic`). A failing test file reports `status: err`.
+
+Planned with the Rust extension:
+
+```text
+cargo test *   cargo check *   cargo clippy *   cargo fmt *
+git diff *     git status *
+```
+
+The allow-list is matched on the argv words after splitting on whitespace,
+never by handing the line to `/bin/sh -c`. Anything else observes
+`run: command not allowed: <command>` and nothing executes, so the model can
+choose differently.
 
 ## `ask` in a non-interactive run
 

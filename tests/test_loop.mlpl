@@ -109,14 +109,24 @@ def u:test_loop_read_error_observed() {
   u:assert_true(str_find(final.history, "ERROR: read_text:") > 0, "error observed")
 }
 
-@test {name: "search and run report not available yet", tags: ["loop", "saga2"]}
+@test {name: "search is a placeholder and a non-mlpl RUN is refused", tags: ["loop", "saga2"]}
 def u:test_loop_unavailable_tools() {
-  "Until Saga 2 supplies the extension, SEARCH and RUN observe a clear placeholder.";
+  "Until the extension exists SEARCH observes a placeholder; RUN outside the allow-list is refused, not executed.";
   ask = call(:u:ask_transcript, ["SEARCH pub fn", "RUN cargo test", "DONE ok"]);
   final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
   u:assert_true(str_find(final.history, "search is not available yet") > 0, "search placeholder")?;
-  u:assert_true(str_find(final.history, "run is not available yet") > 0, "run placeholder")?;
+  u:assert_true(str_find(final.history, "run: command not allowed: cargo test") > 0, "run refused")?;
   u:assert_text_eq(final.files, "", "no files touched")
+}
+
+@test {name: "RUN mlpl executes the example tests and observes the results", tags: ["loop", "run"]}
+def u:test_loop_run_mlpl() {
+  "The loop's RUN reaches run_script and the model sees status and per-test lines.";
+  ask = call(:u:ask_transcript, ["RUN mlpl examples/tiny-mlpl-project/tests/test_add.mlpl", "DONE tests pass"]);
+  final = u:run_loop("run the tests", 4, ask, u:allow_all(), :u:decide_no);
+  u:assert_text_eq(final.reason, "done", "finished")?;
+  u:assert_true(str_find(final.history, "status: ok") > 0, "status observed")?;
+  u:assert_true(str_find(final.history, "passed: add sums two numbers") > 0, "test line observed")
 }
 
 u:run_registered_tests()

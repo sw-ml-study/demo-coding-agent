@@ -1,0 +1,16 @@
+# Fixture: a test file with one passing and one failing test, for RUN observations.
+include "../../../examples/tiny-mlpl-project/vendor/mlplunit.mlpl";
+
+@test {name: "one passes", tags: ["fixture"]}
+def u:test_passes() {
+  "Always passes.";
+  u:assert_eq(1, 1, "same")
+}
+
+@test {name: "one fails", tags: ["fixture"]}
+def u:test_fails() {
+  "Always fails.";
+  u:assert_eq(1, 2, "different")
+}
+
+u:run_registered_tests()

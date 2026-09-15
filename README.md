@@ -170,8 +170,10 @@ authorize, execute, update. The model reply is parsed by
 `ask` resolves through an injected decision function, so an unattended run
 never writes. The loop stops with a reason value: `done`, `denied`, or
 `budget`. A malformed reply or a failed builtin becomes an observation the
-model sees on its next turn. `SEARCH` and `RUN` observe "not available yet"
-until Saga 2 supplies the extension. `LOOP_TASK` and `LOOP_BUDGET` override
+model sees on its next turn. `RUN mlpl <path>` runs an MLPL test file
+through `run_script` and observes its status and per-test results; any other
+command is refused without executing. `SEARCH` observes "not available yet"
+until the extension exists. `LOOP_TASK` and `LOOP_BUDGET` override
 the task and the step limit. The system prompt is
 [`prompts/act.md`](prompts/act.md).
 
@@ -182,7 +184,7 @@ decision, parse-error recovery, and read errors are proven offline.
 ## Tests and probes
 
 ```sh
-just tests        # 56 native mlplunit tests, no model server needed
+just tests        # 64 native mlplunit tests, no model server needed
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 
