@@ -1,0 +1,6 @@
+# Tiny MLPL project the coding agent edits: one documented function to start.
+
+def u:add(a, b) {
+  "Add two numbers.";
+  a + b
+}

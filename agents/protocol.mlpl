@@ -185,19 +185,65 @@ def u:rest_after(lines, start) {
   result
 }
 
+def u:is_fence_line(line) {
+  "1 when a line is only a markdown fence: three backticks, optionally followed by one language word.";
+  trimmed = u:trim(line);
+  if u:has_prefix(trimmed, "```") {
+    if str_find(str_slice(trimmed, 3, str_len(trimmed)), " ") < 0 {
+      1
+    } else {
+      0
+    }
+  } else {
+    0
+  }
+}
+
+def u:join_lines(lines, first, last) {
+  "Join lines[first, last) each followed by a newline.";
+  body = "";
+  i = first;
+  while i < last {
+    body = str_concat(body, str_concat(unwrap(list_get(lines, i)), "\n"));
+    i = i + 1
+  };
+  body
+}
+
+def u:strip_outer_fences(lines, first, last) {
+  "Body text for lines[first, last) with a fence-only first and last line dropped; inner fences are content.";
+  from = if last > first {
+    if u:is_fence_line(unwrap(list_get(lines, first))) {
+      first + 1
+    } else {
+      first
+    }
+  } else {
+    first
+  };
+  to = if last > from {
+    if u:is_fence_line(unwrap(list_get(lines, last - 1))) {
+      last - 1
+    } else {
+      last
+    }
+  } else {
+    last
+  };
+  u:join_lines(lines, from, to)
+}
+
 def u:parse_write(lines, start, path) {
-  "Collect body lines after start up to END; err on missing END or text after it.";
+  "Collect body lines after start up to END, dropping outer fence lines; err on missing END or text after it.";
   n = list_len(lines);
   i = start + 1;
-  body = "";
   end_at = -1;
   while i < n {
-    line = unwrap(list_get(lines, i));
-    if str_eq(u:rtrim(line), "END") {
+    if str_eq(u:rtrim(unwrap(list_get(lines, i))), "END") {
       end_at = i;
       break
     } else {
-      body = str_concat(body, str_concat(line, "\n"))
+      0
     };
     i = i + 1
   };
@@ -205,7 +251,7 @@ def u:parse_write(lines, start, path) {
     err("missing END after WRITE body")
   } else {
     u:rest_after(lines, end_at + 1)?;
-    ok({tool: "write", path: path, body: body})
+    ok({tool: "write", path: path, body: u:strip_outer_fences(lines, start + 1, end_at)})
   }
 }
 

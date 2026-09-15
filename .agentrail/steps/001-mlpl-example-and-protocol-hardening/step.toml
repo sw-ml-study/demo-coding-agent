@@ -1,6 +1,6 @@
 number = 1
 slug = "mlpl-example-and-protocol-hardening"
-status = "pending"
+status = "in-progress"
 description = "Add examples/tiny-mlpl-project: lib.mlpl with a module comment and one docume..."
 role = "production"
 context_files = []

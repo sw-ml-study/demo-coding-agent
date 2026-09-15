@@ -1,0 +1,27 @@
+# Prove the agent's MLPL target project runs under run_script with captured test events.
+
+@test {name: "tiny-mlpl-project tests pass under run_script", tags: ["example", "run-script"]}
+def u:test_example_project_runs() {
+  "The example test file needs no runner: status ok, one passed, and a passed test_end event.";
+  result = run_script("examples/tiny-mlpl-project/tests/test_add.mlpl", {source_dir: ".", capture: 1});
+  u:assert_ok(result, "run_script ok")?;
+  outcome = unwrap(result);
+  u:assert_text_eq(outcome.status, "ok", "status")?;
+  report = unwrap(outcome.value_raw);
+  u:assert_eq(report.passed, 1, "one test passed")?;
+  u:assert_eq(report.tests, 1, "one test discovered")?;
+  u:assert_eq(list_len(outcome.events), 2, "start and end events")?;
+  last = unwrap(list_get(outcome.events, 1));
+  u:assert_true(str_find(last, "\"status\":\"passed\"") > 0, "test_end passed")
+}
+
+@test {name: "the vendored library matches its recorded pin", tags: ["example", "vendor"]}
+def u:test_vendor_pin_documented() {
+  "VENDOR.md names the source, version, commit, and hash so the copy is reproducible.";
+  note = unwrap(read_text("examples/tiny-mlpl-project/vendor/VENDOR.md"));
+  u:assert_true(str_find(note, "lib/mlplunit.mlpl") > 0, "source path")?;
+  u:assert_true(str_find(note, "SHA-256") > 0, "hash recorded")?;
+  u:assert_ok(read_text("examples/tiny-mlpl-project/vendor/mlplunit.mlpl"), "library present")
+}
+
+u:run_registered_tests()

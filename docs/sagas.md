@@ -17,7 +17,12 @@ errors are all proven offline; `just v0` and `just loop` ran live against
 qwen2.5-coder:7b; the capability ledger classifies every used builtin with
 evidence and queues eight sw-MLPL findings.
 
-## Next: the agent codes in MLPL, then mechanisms for Rust
+## Active: the agent codes in MLPL, then mechanisms for Rust
+
+Progress: step 001 added `examples/tiny-mlpl-project` (runs under
+`run_script` with captured PASS events via the vendored mlplunit library)
+and hardened the protocol against fenced WRITE bodies with tests for each
+habit and for the strict rejections.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

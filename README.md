@@ -182,15 +182,17 @@ decision, parse-error recovery, and read errors are proven offline.
 ## Tests and probes
 
 ```sh
-just tests        # 51 native mlplunit tests, no model server needed
+just tests        # 56 native mlplunit tests, no model server needed
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 
 The mlplunit suites under `tests/` pin the measured behavior of every builtin
-the agent will depend on: sandboxed reads, walks, writes, and removals; parent
-and symlink escapes returning `err`; the `run_script` outcome record; and the
-string helpers a prefix action protocol needs. The fixture crate the agent
-will edit lives in `examples/tiny-rust-project`.
+the agent depends on, the protocol parser, and the loop. The agent's first
+coding target is `examples/tiny-mlpl-project`: a one-function `lib.mlpl`
+and a `tests/test_add.mlpl` that runs under sw-MLPL's `run_script` with no
+runner, because the mlplunit assertion library is vendored beside it with
+its pin in `vendor/VENDOR.md`. `examples/tiny-rust-project` is the later
+target for the Rust extension path.
 
 ## Current status
 

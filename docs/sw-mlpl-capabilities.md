@@ -84,6 +84,10 @@ must write `include "agents/x.mlpl"` relative to `source_root`. Both are
 defensible; the asymmetry means an agent file cannot be included the same
 way from a test and from a runner. Suggested improvement: have mlplunit run
 tests in place, or document source-root-relative includes as the contract.
+Consequence measured in Saga 2: `examples/tiny-mlpl-project/tests/test_add.mlpl`
+includes the vendored library file-relatively so `run_script` (the agent's
+`RUN`) can execute it; the same file cannot be run by mlplunit, which copies
+it to a temp directory and would also prepend its own copy of the library.
 
 ### F7. Dispatch on a record tag needs nested if/else chains (awkward, improvement)
 

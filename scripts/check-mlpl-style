@@ -3,7 +3,8 @@ set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 files=$(find "$repo_dir" -type f -name '*.mlpl' \
-    -not -path "$repo_dir/.git/*" -not -path "$repo_dir/out/*" | sort)
+    -not -path "$repo_dir/.git/*" -not -path "$repo_dir/out/*" \
+    -not -path "$repo_dir/examples/*/vendor/*" | sort)
 
 if [ -z "$files" ]; then
     echo "MLPL style: no source files yet"

@@ -1,0 +1,282 @@
+# mlplunit assertion library. The runner prepends this source to each test.
+#
+# Public API overview:
+# - u:assert_* functions return ok(1) when an assertion passes.
+# - Failures return err({kind: "assertion", ...}) with the user message and
+#   assertion-specific actual/expected fields.
+# - Use `u:assert_*(...)?` inside a test function to stop at the first failure.
+# - u:fail(message) records an unconditional assertion failure.
+# - u:text_equal is a public compatibility helper for exact UTF-8 text equality.
+# - u:run_test and u:run_case invoke first-class user-function references for
+#   manual suites and individual cases.
+# - u:run_registered_tests discovers @test functions in source order, honors
+#   skip/expected_failure metadata, and returns a Result summary.
+# - u:run_cases invokes a one-argument callable for every numeric parameter row,
+#   continues after failures, and returns the first failure or a pass summary.
+# - u:run_fixture_test and u:run_registered_fixture_tests compose callable
+#   setup/use/teardown through bracket's guaranteed cleanup boundary.
+#
+# Equality uses sw-MLPL's total equal() operation over scalars, text, arrays,
+# records, models, and Results. Failure records retain the values and include
+# bounded repr() strings for stable diagnostics.
+
+def u:assert_true(condition, message) {
+  "Pass when condition is truthy; otherwise return an assertion Err.";
+  if condition {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "true", message: message, actual: condition})
+  }
+}
+
+def u:assert_false(condition, message) {
+  "Pass when condition is falsey; otherwise return an assertion Err.";
+  if condition {
+    err({kind: "assertion", assertion: "false", message: message, actual: condition})
+  } else {
+    ok(1)
+  }
+}
+
+def u:assert_eq(actual, expected, message) {
+  "Pass when actual and expected are structurally equal.";
+  if equal(actual, expected) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "equal", message: message, actual: actual, expected: expected, actual_repr: repr(actual), expected_repr: repr(expected)})
+  }
+}
+
+def u:assert_ne(actual, unexpected, message) {
+  "Pass unless actual and unexpected are structurally equal.";
+  if equal(actual, unexpected) {
+    err({kind: "assertion", assertion: "not-equal", message: message, actual: actual, unexpected: unexpected, actual_repr: repr(actual), unexpected_repr: repr(unexpected)})
+  } else {
+    ok(1)
+  }
+}
+
+def u:assert_approx(actual, expected, tolerance, message) {
+  "Pass when every absolute difference is at most tolerance.";
+  difference = abs(actual - expected);
+  within = lt(difference, tolerance) + eq(difference, tolerance);
+  if reduce(:and, within) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "approx", message: message, actual: actual, expected: expected, tolerance: tolerance})
+  }
+}
+
+def u:assert_lt(actual, upper_bound, message) {
+  "Pass when every actual element is less than its upper bound.";
+  if reduce(:and, lt(actual, upper_bound)) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "less-than", message: message, actual: actual, upper_bound: upper_bound})
+  }
+}
+
+def u:assert_gt(actual, lower_bound, message) {
+  "Pass when every actual element is greater than its lower bound.";
+  if reduce(:and, gt(actual, lower_bound)) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "greater-than", message: message, actual: actual, lower_bound: lower_bound})
+  }
+}
+
+def u:text_equal(actual, expected) {
+  "Return truthy when two UTF-8 strings contain exactly the same bytes.";
+  actual_bytes = tokenize_bytes(actual);
+  expected_bytes = tokenize_bytes(expected);
+  if eq(tally(actual_bytes), tally(expected_bytes)) {
+    reduce(:and, eq(actual_bytes, expected_bytes))
+  } else {
+    0
+  }
+}
+
+def u:assert_text_eq(actual, expected, message) {
+  "Pass when actual and expected contain exactly the same UTF-8 bytes.";
+  if u:text_equal(actual, expected) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "text-equal", message: message, actual: actual, expected: expected})
+  }
+}
+
+def u:assert_shape(actual, expected, message) {
+  "Pass when shape(actual) exactly matches the expected shape vector.";
+  actual_shape = shape(actual);
+  if eq(tally(actual_shape), tally(expected)) {
+    if reduce(:and, eq(actual_shape, expected)) {
+      ok(1)
+    } else {
+      err({kind: "assertion", assertion: "shape", message: message, actual: actual_shape, expected: expected})
+    }
+  } else {
+    err({kind: "assertion", assertion: "shape", message: message, actual: actual_shape, expected: expected})
+  }
+}
+
+def u:assert_error_kind(error, expected, message) {
+  "Pass when a caught hard-error record has the expected textual kind.";
+  if u:text_equal(error.kind, expected) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "error-kind", message: message, actual: error.kind, expected: expected})
+  }
+}
+
+def u:assert_ok(result, message) {
+  "Pass when result is Ok; preserve the full value in failure diagnostics.";
+  if is_ok(result) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "ok", message: message, actual: result})
+  }
+}
+
+def u:assert_err(result, message) {
+  "Pass when result is Err; preserve the full value in failure diagnostics.";
+  if is_err(result) {
+    ok(1)
+  } else {
+    err({kind: "assertion", assertion: "err", message: message, actual: result})
+  }
+}
+
+def u:fail(message) {
+  "Always return an assertion Err with message.";
+  err({kind: "assertion", assertion: "fail", message: message})
+}
+
+def u:run_test(test) {
+  "Invoke a zero-argument callable test and return its value unchanged.";
+  call(test)
+}
+
+def u:run_case(test, input) {
+  "Invoke a one-argument callable test case and return its value unchanged.";
+  call(test, input)
+}
+
+def u:run_registered_tests() {
+  "Discover and run all @test functions in stable registration order.";
+  names = tests();
+  index = 0;
+  passed = 0;
+  skipped = 0;
+  expected_failures = 0;
+  first_failure = ok(1);
+  while lt(index, list_len(names)) {
+    name = list_get(names, index)?;
+    info = test_info(name);
+    if gt(tally(tokenize_bytes(info.skip)), 0) {
+      emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "skipped", source: info.source, line: info.line})?;
+      skipped = skipped + 1
+    } else {
+      emit_test_event({version: 1, kind: "test_start", suite: "mlplunit", name: name, source: info.source, line: info.line})?;
+      outcome = try { call(info.fn) } catch error { err(error) };
+      if info.expected_failure {
+        if is_err(outcome) {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "expected_failure", source: info.source, line: info.line, diagnostic: repr(outcome)})?;
+          expected_failures = expected_failures + 1
+        } else {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "failed", source: info.source, line: info.line, diagnostic: "expected failure passed"})?;
+          if is_ok(first_failure) { first_failure = u:fail(name) } else { 0 }
+        }
+      } else {
+        if is_err(outcome) {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "failed", source: info.source, line: info.line, diagnostic: repr(outcome)})?;
+          if is_ok(first_failure) { first_failure = outcome } else { 0 }
+        } else {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "passed", source: info.source, line: info.line})?;
+          passed = passed + 1
+        }
+      }
+    };
+    index = index + 1
+  };
+  if is_err(first_failure) {
+    first_failure
+  } else {
+    ok({tests: list_len(names), passed: passed, skipped: skipped, expected_failures: expected_failures})
+  }
+}
+
+def u:run_cases(test, cases) {
+  "Run every numeric parameter row, continuing after failures.";
+  total = take(shape(cases), 0, 0);
+  index = 0;
+  passed = 0;
+  first_failure = ok(1);
+  while lt(index, total) {
+    row = take(cases, 0, index);
+    case_name = repr(test);
+    emit_test_event({version: 1, kind: "case_start", suite: "mlplunit", name: case_name, case_index: index, parameters: repr(row)})?;
+    outcome = try { call(test, row) } catch error { err(error) };
+    if is_err(outcome) {
+      emit_test_event({version: 1, kind: "case_end", suite: "mlplunit", name: case_name, case_index: index, status: "failed", diagnostic: repr(outcome)})?;
+      if is_ok(first_failure) { first_failure = outcome } else { 0 }
+    } else {
+      emit_test_event({version: 1, kind: "case_end", suite: "mlplunit", name: case_name, case_index: index, status: "passed"})?;
+      passed = passed + 1
+    };
+    index = index + 1
+  };
+  if is_err(first_failure) {
+    first_failure
+  } else {
+    ok({cases: total, passed: passed, failed: 0})
+  }
+}
+
+def u:run_fixture_test(setup, test, teardown) {
+  "Run one fixture test with teardown guaranteed after successful setup.";
+  bracket(setup, test, teardown)
+}
+
+def u:run_registered_fixture_tests(setup, teardown) {
+  "Run @test functions with a fresh bracketed fixture in registration order.";
+  names = tests();
+  index = 0;
+  passed = 0;
+  skipped = 0;
+  expected_failures = 0;
+  first_failure = ok(1);
+  while lt(index, list_len(names)) {
+    name = list_get(names, index)?;
+    info = test_info(name);
+    if gt(tally(tokenize_bytes(info.skip)), 0) {
+      emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "skipped", source: info.source, line: info.line})?;
+      skipped = skipped + 1
+    } else {
+      emit_test_event({version: 1, kind: "test_start", suite: "mlplunit", name: name, source: info.source, line: info.line})?;
+      outcome = bracket(setup, info.fn, teardown);
+      if info.expected_failure {
+        if is_err(outcome) {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "expected_failure", source: info.source, line: info.line, diagnostic: repr(outcome)})?;
+          expected_failures = expected_failures + 1
+        } else {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "failed", source: info.source, line: info.line, diagnostic: "expected failure passed"})?;
+          if is_ok(first_failure) { first_failure = u:fail(name) } else { 0 }
+        }
+      } else {
+        if is_err(outcome) {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "failed", source: info.source, line: info.line, diagnostic: repr(outcome)})?;
+          if is_ok(first_failure) { first_failure = outcome } else { 0 }
+        } else {
+          emit_test_event({version: 1, kind: "test_end", suite: "mlplunit", name: name, status: "passed", source: info.source, line: info.line})?;
+          passed = passed + 1
+        }
+      }
+    };
+    index = index + 1
+  };
+  if is_err(first_failure) {
+    first_failure
+  } else {
+    ok({tests: list_len(names), passed: passed, skipped: skipped, expected_failures: expected_failures})
+  }
+}

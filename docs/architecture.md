@@ -99,7 +99,13 @@ path})`, `ok({tool: "search", text})`, `ok({tool: "write", path, body})`,
 `ok({tool: "run", argv})`, `ok({tool: "done", summary})`, or an `err`
 naming the reason: empty reply, unknown verb, missing END, more than one
 action, empty path, `..` component, absolute path. Verbs are whole words;
-CRLF is normalized; the body keeps its inner newlines. Later sagas may add
+CRLF is normalized; the body keeps its inner newlines. Model habits seen in
+live transcripts and now tolerated, each pinned by a test: a fence-only line
+(three backticks, optionally with a language word) directly after
+`WRITE <path>` and directly before `END` is dropped; fences inside the body
+are content. Habits seen and deliberately not tolerated: a body without
+`END`, `DONE` on the line after a body, and `END` sent as its own turn; the
+system prompt in `prompts/act.md` forbids them instead. Later sagas may add
 `PATCH` with exact old/new text. This is the place where tagged sum values
 would help MLPL; the records-plus-`Result` encoding is recorded as awkward,
 not blocking, in the capability ledger.
@@ -131,7 +137,8 @@ never given a shell. See [permissions](permissions.md).
 ```text
 agents/                  MLPL agents: v0 read/think, loop, planner/builder/reviewer
 prompts/                 system prompts as plain text files
-examples/tiny-rust-project/  the project the agent edits under test
+examples/tiny-mlpl-project/  the first project the agent edits: lib.mlpl, tests/, vendored mlplunit
+examples/tiny-rust-project/  the Rust project for the extension path
 extensions/agent-tools/  Rust cdylib + extension.toml + module.mlpl (Saga 2)
 tests/                   native mlplunit suites with scripted fake models
 fixtures/                recorded transcripts and expected observations

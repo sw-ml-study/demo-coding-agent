@@ -1,0 +1,12 @@
+# Tests for the tiny MLPL project; runnable by mlplunit or by run_script via the vendored library.
+include "../vendor/mlplunit.mlpl";
+include "../lib.mlpl";
+
+@test {name: "add sums two numbers", tags: ["add"]}
+def u:test_add() {
+  "Prove u:add on small integers.";
+  u:assert_eq(u:add(2, 3), 5, "2 + 3")?;
+  u:assert_eq(u:add(-1, 1), 0, "-1 + 1")
+}
+
+u:run_registered_tests()

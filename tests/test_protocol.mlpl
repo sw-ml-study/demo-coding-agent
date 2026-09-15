@@ -71,6 +71,31 @@ def u:test_parse_crlf() {
   u:assert_text_eq(b.path, "a.txt", "read path without CR")
 }
 
+@test {name: "a markdown fence line after WRITE and before END is stripped", tags: ["protocol", "write", "habit"]}
+def u:test_parse_write_fenced() {
+  "Live models fence the body; a fence-only line directly after the path and directly before END is dropped.";
+  a = unwrap(u:parse_action("WRITE a.txt\n```\nline one\nline two\n```\nEND"));
+  u:assert_text_eq(a.body, "line one\nline two\n", "fence lines removed")?;
+  b = unwrap(u:parse_action("WRITE a.mlpl\n```mlpl\nx = 1\n```\nEND"));
+  u:assert_text_eq(b.body, "x = 1\n", "fence with language word removed")?;
+  c = unwrap(u:parse_action("WRITE a.txt\n```\nonly opening fence\nEND"));
+  u:assert_text_eq(c.body, "only opening fence\n", "opening fence alone removed")
+}
+
+@test {name: "fences inside the body are kept", tags: ["protocol", "write", "habit"]}
+def u:test_parse_write_inner_fence_kept() {
+  "Only the outermost fence lines are habit; a fence in the middle is content.";
+  a = unwrap(u:parse_action("WRITE doc.md\n# Title\n```sh\njust check\n```\nmore\nEND"));
+  u:assert_text_eq(a.body, "# Title\n```sh\njust check\n```\nmore\n", "inner fences kept")
+}
+
+@test {name: "a fenced body still needs END", tags: ["protocol", "reject", "habit"]}
+def u:test_reject_fenced_missing_end() {
+  "Tolerating fences does not relax the terminator or the single-action rule.";
+  u:assert_err(u:parse_action("WRITE a.txt\n```\nbody\n```"), "closing fence is not END")?;
+  u:assert_err(u:parse_action("WRITE a.txt\n```\nbody\n```\nEND\nDONE x"), "action after END still rejected")
+}
+
 @test {name: "empty reply is rejected", tags: ["protocol", "reject"]}
 def u:test_reject_empty() {
   "An empty or whitespace-only reply is err naming empty reply.";
