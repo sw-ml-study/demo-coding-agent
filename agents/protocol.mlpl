@@ -1,0 +1,274 @@
+# Action protocol parser: one model reply becomes an action record or a named err.
+
+def u:has_prefix(s, prefix) {
+  "1 when s starts with prefix, else 0.";
+  if str_find(s, prefix) == 0 {
+    1
+  } else {
+    0
+  }
+}
+
+def u:has_verb(line, verb) {
+  "1 when line is exactly verb or starts with verb followed by a space.";
+  if str_eq(line, verb) {
+    1
+  } else { u:has_prefix(line, str_concat(verb, " ")) }
+}
+
+def u:is_blank_char(c) {
+  "1 for a space, tab, or carriage return character.";
+  if str_eq(c, " ") {
+    1
+  } else {
+    if str_eq(c, "\t") {
+      1
+    } else {
+      str_eq(c, "\r")
+    }
+  }
+}
+
+def u:rtrim(s) {
+  "Strip trailing spaces, tabs, and carriage returns; MLPL has no str_trim.";
+  n = str_len(s);
+  while n > 0 {
+    if u:is_blank_char(str_slice(s, n - 1, 1)) {
+      n = n - 1
+    } else {
+      break
+    }
+  };
+  str_slice(s, 0, n)
+}
+
+def u:ltrim(s) {
+  "Strip leading spaces and tabs.";
+  n = str_len(s);
+  i = 0;
+  while i < n {
+    if u:is_blank_char(str_slice(s, i, 1)) {
+      i = i + 1
+    } else {
+      break
+    }
+  };
+  str_slice(s, i, n - i)
+}
+
+def u:trim(s) {
+  "Strip both ends.";
+  u:ltrim(u:rtrim(s))
+}
+
+def u:normalize_newlines(text) {
+  "Turn CRLF into LF so line splitting is uniform.";
+  str_join(str_split(text, "\r\n"), "\n")
+}
+
+def u:is_verb_line(line) {
+  "1 when a trimmed line starts with one of the five protocol verbs.";
+  if u:has_verb(line, "READ") {
+    1
+  } else {
+    if u:has_verb(line, "SEARCH") {
+      1
+    } else {
+      if u:has_verb(line, "WRITE") {
+        1
+      } else {
+        if u:has_verb(line, "RUN") {
+          1
+        } else { u:has_verb(line, "DONE") }
+      }
+    }
+  }
+}
+
+def u:argument_after(line, verb) {
+  "The trimmed remainder of line after the verb word.";
+  u:trim(str_slice(line, str_len(verb), str_len(line)))
+}
+
+def u:validate_path(path) {
+  "ok(path) for a non-empty relative path with no .. component; err otherwise.";
+  if str_len(path) == 0 {
+    err("empty path")
+  } else {
+    if u:has_prefix(path, "/") {
+      err(str_concat("absolute path not allowed: ", path))
+    } else {
+      if u:has_parent_component(path) {
+        err(str_concat("path may not contain ..: ", path))
+      } else {
+        ok(path)
+      }
+    }
+  }
+}
+
+def u:has_parent_component(path) {
+  "1 when any slash-separated component of path is exactly ..";
+  parts = str_split(path, "/");
+  n = list_len(parts);
+  i = 0;
+  found = 0;
+  while i < n {
+    if str_eq(unwrap(list_get(parts, i)), "..") {
+      found = 1
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+
+def u:split_words(text) {
+  "Split on spaces and tabs, dropping empty words; MLPL has no list filter.";
+  raw = str_split(str_join(str_split(text, "\t"), " "), " ");
+  n = list_len(raw);
+  i = 0;
+  joined = "";
+  while i < n {
+    word = unwrap(list_get(raw, i));
+    if str_len(word) > 0 {
+      joined = if str_len(joined) == 0 {
+        word
+      } else {
+        str_join([joined, word], " ")
+      }
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  str_split(joined, " ")
+}
+
+def u:first_content_line(lines) {
+  "Index of the first non-blank line, or -1.";
+  n = list_len(lines);
+  i = 0;
+  found = -1;
+  while i < n {
+    if str_len(u:trim(unwrap(list_get(lines, i)))) > 0 {
+      found = i;
+      break
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+
+def u:rest_after(lines, start) {
+  "err if any non-blank line follows start; ok(1) otherwise.";
+  n = list_len(lines);
+  i = start;
+  result = ok(1);
+  while i < n {
+    line = u:trim(unwrap(list_get(lines, i)));
+    if str_len(line) > 0 {
+      result = if u:is_verb_line(line) {
+        err("more than one action")
+      } else {
+        err(str_concat("unexpected text after action: ", line))
+      };
+      i = n
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  result
+}
+
+def u:parse_write(lines, start, path) {
+  "Collect body lines after start up to END; err on missing END or text after it.";
+  n = list_len(lines);
+  i = start + 1;
+  body = "";
+  end_at = -1;
+  while i < n {
+    line = unwrap(list_get(lines, i));
+    if str_eq(u:rtrim(line), "END") {
+      end_at = i;
+      break
+    } else {
+      body = str_concat(body, str_concat(line, "\n"))
+    };
+    i = i + 1
+  };
+  if end_at < 0 {
+    err("missing END after WRITE body")
+  } else {
+    u:rest_after(lines, end_at + 1)?;
+    ok({tool: "write", path: path, body: body})
+  }
+}
+
+def u:parse_done(lines, start, first) {
+  "Join the summary on the DONE line with any following non-blank lines.";
+  n = list_len(lines);
+  i = start + 1;
+  summary = first;
+  while i < n {
+    line = u:rtrim(unwrap(list_get(lines, i)));
+    if str_len(u:trim(line)) > 0 {
+      summary = str_join([summary, line], "\n")
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  ok({tool: "done", summary: summary})
+}
+
+def u:parse_action(text) {
+  "Parse exactly one protocol action from a model reply: ok(record) or err(reason).";
+  lines = str_split(u:normalize_newlines(text), "\n");
+  start = u:first_content_line(lines);
+  if start < 0 {
+    err("empty reply")
+  } else {
+    line = u:trim(unwrap(list_get(lines, start)));
+    if u:has_verb(line, "READ") {
+      path = u:validate_path(u:argument_after(line, "READ"))?;
+      u:rest_after(lines, start + 1)?;
+      ok({tool: "read", path: path})
+    } else {
+      if u:has_verb(line, "SEARCH") {
+        query = u:argument_after(line, "SEARCH");
+        if str_len(query) == 0 {
+          err("empty search text")
+        } else {
+          u:rest_after(lines, start + 1)?;
+          ok({tool: "search", text: query})
+        }
+      } else {
+        if u:has_verb(line, "WRITE") {
+          path = u:validate_path(u:argument_after(line, "WRITE"))?;
+          u:parse_write(lines, start, path)
+        } else {
+          if u:has_verb(line, "RUN") {
+            command = u:argument_after(line, "RUN");
+            if str_len(command) == 0 {
+              err("empty command")
+            } else {
+              u:rest_after(lines, start + 1)?;
+              ok({tool: "run", argv: u:split_words(command)})
+            }
+          } else {
+            if u:has_verb(line, "DONE") {
+              u:parse_done(lines, start, u:argument_after(line, "DONE"))
+            } else {
+              err(str_concat("unknown verb: ", line))
+            }
+          }
+        }
+      }
+    }
+  }
+}

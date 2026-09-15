@@ -64,6 +64,7 @@ DONE <summary>
 | version | shape                               |
 |---------|-------------------------------------|
 | v0      | READ, THINK (done)                  |
+| v0.5    | action protocol parser (done)       |
 | v1      | READ, SEARCH, THINK                 |
 | v2      | READ, SEARCH, EDIT, TEST            |
 | v3      | repeat until tests pass             |
@@ -156,7 +157,7 @@ prompt. Against `qwen2.5-coder:7b` the fixture crate yields an explanation of
 ## Tests and probes
 
 ```sh
-just tests        # 26 native mlplunit tests, no model server needed
+just tests        # 41 native mlplunit tests, no model server needed
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 
@@ -168,10 +169,12 @@ will edit lives in `examples/tiny-rust-project`.
 
 ## Current status
 
-Foundation, measured builtins, and the v0 read/think agent are complete. The
-[capability ledger](docs/sw-mlpl-capabilities.md) records measured rows and
-six findings for sw-MLPL, including that `+` does not concatenate strings and
-that an undefined function call reports a misleading diagnostic. The next
-step builds the action protocol parser.
+Foundation, measured builtins, the v0 read/think agent, and the action
+protocol parser in [`agents/protocol.mlpl`](agents/protocol.mlpl) are
+complete. The [capability ledger](docs/sw-mlpl-capabilities.md) records
+measured rows and eight findings for sw-MLPL, including that `+` does not
+concatenate strings, that an undefined function call reports a misleading
+diagnostic, and that verb dispatch needs nested `if`/`else` chains. The next
+step builds the bounded read/write loop.
 
 Copyright (c) 2026 Michael A Wright. Distributed under the [MIT License](LICENSE).

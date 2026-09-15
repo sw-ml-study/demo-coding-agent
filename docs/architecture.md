@@ -90,10 +90,15 @@ DONE <summary>
 ```
 
 Native tool-calling JSON is deliberately avoided so the mechanism stays
-readable. The parser turns each line into a record or an `err(...)`. Later
-sagas may add `PATCH` with exact old/new text. This is the place where tagged
-sum values would help MLPL; the records-plus-`Result` encoding is recorded as
-awkward, not blocking.
+readable. `agents/protocol.mlpl` turns one reply into `ok({tool: "read",
+path})`, `ok({tool: "search", text})`, `ok({tool: "write", path, body})`,
+`ok({tool: "run", argv})`, `ok({tool: "done", summary})`, or an `err`
+naming the reason: empty reply, unknown verb, missing END, more than one
+action, empty path, `..` component, absolute path. Verbs are whole words;
+CRLF is normalized; the body keeps its inner newlines. Later sagas may add
+`PATCH` with exact old/new text. This is the place where tagged sum values
+would help MLPL; the records-plus-`Result` encoding is recorded as awkward,
+not blocking, in the capability ledger.
 
 ## Model injection
 

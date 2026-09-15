@@ -1,0 +1,140 @@
+# Prove u:parse_action turns one model reply into an action record or a named err.
+include "agents/protocol.mlpl";
+
+@test {name: "READ parses into a read record", tags: ["protocol", "read"]}
+def u:test_parse_read() {
+  "Accept READ <path> and keep the path verbatim.";
+  action = u:parse_action("READ src/lib.rs");
+  u:assert_ok(action, "read parses")?;
+  a = unwrap(action);
+  u:assert_text_eq(a.tool, "read", "tool")?;
+  u:assert_text_eq(a.path, "src/lib.rs", "path")
+}
+
+@test {name: "SEARCH parses into a search record with the full text", tags: ["protocol", "search"]}
+def u:test_parse_search() {
+  "Accept SEARCH <text> where text may contain spaces.";
+  a = unwrap(u:parse_action("SEARCH pub fn add"));
+  u:assert_text_eq(a.tool, "search", "tool")?;
+  u:assert_text_eq(a.text, "pub fn add", "text")
+}
+
+@test {name: "WRITE parses path and multi-line body up to END", tags: ["protocol", "write"]}
+def u:test_parse_write() {
+  "Accept WRITE <path>, body lines, END; the body keeps inner newlines and no END.";
+  reply = "WRITE src/lib.rs\nfn a() {}\n\nfn b() {}\nEND";
+  a = unwrap(u:parse_action(reply));
+  u:assert_text_eq(a.tool, "write", "tool")?;
+  u:assert_text_eq(a.path, "src/lib.rs", "path")?;
+  u:assert_text_eq(a.body, "fn a() {}\n\nfn b() {}\n", "body ends with one newline")
+}
+
+@test {name: "WRITE with an empty body is accepted", tags: ["protocol", "write"]}
+def u:test_parse_write_empty_body() {
+  "An immediately following END yields an empty body.";
+  a = unwrap(u:parse_action("WRITE notes.txt\nEND"));
+  u:assert_text_eq(a.body, "", "empty body")
+}
+
+@test {name: "RUN parses the command into argv", tags: ["protocol", "run"]}
+def u:test_parse_run() {
+  "Accept RUN <command> and split on whitespace, collapsing repeated spaces.";
+  a = unwrap(u:parse_action("RUN cargo  test --lib"));
+  u:assert_text_eq(a.tool, "run", "tool")?;
+  u:assert_eq(list_len(a.argv), 3, "three words")?;
+  u:assert_text_eq(unwrap(list_get(a.argv, 0)), "cargo", "argv[0]")?;
+  u:assert_text_eq(unwrap(list_get(a.argv, 2)), "--lib", "argv[2]")
+}
+
+@test {name: "DONE parses the summary including later lines", tags: ["protocol", "done"]}
+def u:test_parse_done() {
+  "Accept DONE <summary>; a multi-line summary is joined with newlines.";
+  a = unwrap(u:parse_action("DONE Added a test.\nIt passes."));
+  u:assert_text_eq(a.tool, "done", "tool")?;
+  u:assert_text_eq(a.summary, "Added a test.\nIt passes.", "summary")
+}
+
+@test {name: "trailing whitespace and blank lines are ignored", tags: ["protocol", "whitespace"]}
+def u:test_parse_trailing_whitespace() {
+  "Trim trailing spaces and tabs on the action line and skip surrounding blank lines.";
+  a = unwrap(u:parse_action("\n  \nREAD src/lib.rs   \n\n"));
+  u:assert_text_eq(a.path, "src/lib.rs", "path without trailing spaces")
+}
+
+@test {name: "Windows line endings are accepted", tags: ["protocol", "crlf"]}
+def u:test_parse_crlf() {
+  "CRLF replies parse like LF replies, including inside a WRITE body.";
+  a = unwrap(u:parse_action("WRITE a.txt\r\nline\r\nEND\r\n"));
+  u:assert_text_eq(a.path, "a.txt", "path")?;
+  u:assert_text_eq(a.body, "line\n", "body normalized to LF")?;
+  b = unwrap(u:parse_action("READ a.txt\r\n"));
+  u:assert_text_eq(b.path, "a.txt", "read path without CR")
+}
+
+@test {name: "empty reply is rejected", tags: ["protocol", "reject"]}
+def u:test_reject_empty() {
+  "An empty or whitespace-only reply is err naming empty reply.";
+  u:assert_err(u:parse_action(""), "empty")?;
+  r = u:parse_action("  \n\n");
+  u:assert_err(r, "blank")?;
+  u:assert_true(str_find(err_message(r), "empty reply") >= 0, "names the reason")
+}
+
+@test {name: "unknown verb is rejected", tags: ["protocol", "reject"]}
+def u:test_reject_unknown_verb() {
+  "Prose or an unlisted verb is err naming unknown verb.";
+  r = u:parse_action("Sure! I will read the file now.");
+  u:assert_err(r, "prose")?;
+  u:assert_true(str_find(err_message(r), "unknown verb") >= 0, "names the reason")?;
+  u:assert_err(u:parse_action("read src/lib.rs"), "lower-case verb is unknown")?;
+  u:assert_err(u:parse_action("READING the file"), "verb must be a whole word")?;
+  u:assert_err(u:parse_action("DONEish"), "DONE must be a whole word")
+}
+
+@test {name: "WRITE without END is rejected", tags: ["protocol", "reject", "write"]}
+def u:test_reject_missing_end() {
+  "A WRITE body that never terminates is err naming missing END.";
+  r = u:parse_action("WRITE a.txt\nfn a() {}\n");
+  u:assert_err(r, "no END")?;
+  u:assert_true(str_find(err_message(r), "missing END") >= 0, "names the reason")
+}
+
+@test {name: "more than one action is rejected", tags: ["protocol", "reject"]}
+def u:test_reject_multiple_actions() {
+  "A second verb line after READ, or text after END, is err naming more than one action.";
+  r = u:parse_action("READ a.txt\nREAD b.txt");
+  u:assert_err(r, "two reads")?;
+  u:assert_true(str_find(err_message(r), "more than one action") >= 0, "names the reason")?;
+  u:assert_err(u:parse_action("WRITE a.txt\nx\nEND\nRUN cargo test"), "action after END")?;
+  u:assert_err(u:parse_action("READ a.txt\nsome explanation"), "trailing prose after read")
+}
+
+@test {name: "empty path is rejected", tags: ["protocol", "reject", "path"]}
+def u:test_reject_empty_path() {
+  "READ or WRITE with no path is err naming empty path.";
+  r = u:parse_action("READ");
+  u:assert_err(r, "bare READ")?;
+  u:assert_true(str_find(err_message(r), "empty path") >= 0, "names the reason")?;
+  u:assert_err(u:parse_action("READ   "), "spaces only")?;
+  u:assert_err(u:parse_action("WRITE\nx\nEND"), "bare WRITE")
+}
+
+@test {name: "parent traversal and absolute paths are rejected", tags: ["protocol", "reject", "path"]}
+def u:test_reject_unsafe_paths() {
+  "Paths containing .. or starting with / never reach the sandbox.";
+  r = u:parse_action("READ ../secret.txt");
+  u:assert_err(r, "parent")?;
+  u:assert_true(str_find(err_message(r), "..") >= 0, "names the traversal")?;
+  u:assert_err(u:parse_action("READ src/../../x"), "embedded parent")?;
+  u:assert_err(u:parse_action("WRITE /etc/hosts\nx\nEND"), "absolute")?;
+  u:assert_ok(u:parse_action("READ src/lib..rs.bak"), "dots inside a name are not traversal")
+}
+
+@test {name: "empty RUN and SEARCH are rejected", tags: ["protocol", "reject"]}
+def u:test_reject_empty_run_search() {
+  "RUN and SEARCH need an argument.";
+  u:assert_err(u:parse_action("RUN"), "bare RUN")?;
+  u:assert_err(u:parse_action("SEARCH  "), "bare SEARCH")
+}
+
+u:run_registered_tests()

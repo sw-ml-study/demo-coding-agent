@@ -24,7 +24,7 @@ builtin nor an extension can express it; needs a probe before any request).
 | join observations                     | `str_concat(a, b)`, `str_join(parts, sep)` | measured   | `+` on two strings is an error (see findings); `str_join([], sep)` is `""` |
 | inject a fake model                   | `:u:` references, `call` partials          | measured   | `tests/test_v0_read_think.mlpl`: a three-argument partial of `u:ask_live` and a one-argument partial of `u:ask_scripted` both invoke with `call(ask, prompt)` |
 | search text across files              | none                                       | extension  | ripgrep crates (`grep-searcher`, `grep-regex`, `ignore`) in `agent-tools`; `rg` subprocess fallback. Pure MLPL `fs_walk`+`read_text`+`str_find` is possible but ignores `.gitignore` and binaries |
-| tagged action values                  | records + `Result`                         | awkward    | `{tool: ..}` records work; no `match` on a tag |
+| tagged action values                  | records + `Result`                         | measured, awkward | `agents/protocol.mlpl`: `ok({tool: ..})`/`err(reason)` works and tests read fields directly; dispatch on `tool` is a five-deep nested `if`/`else` chain (see F7) |
 | run `cargo test` / `git`              | none                                       | extension  | allow-listed argv runner in `agent-tools` |
 | git diff / status                     | none                                       | extension  | `agent-tools` |
 | exact old/new patch                   | `read_text` + `str_find` + `write_atomic`  | supported  | pure MLPL; no extension planned |
@@ -84,3 +84,25 @@ must write `include "agents/x.mlpl"` relative to `source_root`. Both are
 defensible; the asymmetry means an agent file cannot be included the same
 way from a test and from a runner. Suggested improvement: have mlplunit run
 tests in place, or document source-root-relative includes as the contract.
+
+### F7. Dispatch on a record tag needs nested if/else chains (awkward, improvement)
+
+Probe: `u:parse_action` in `agents/protocol.mlpl` chooses among five verbs
+with five nested `if ... { } else { if ... }` levels because there is no
+`match`, no `else if`, and no early return. The same shape will appear in
+the loop's dispatch on `action.tool`. The record-plus-`Result` encoding
+itself is fine: `ok({tool: "write", path, body})` is readable and tests
+read fields directly. Justified upstream suggestion, in order of value:
+`else if` chaining (small parser change, removes the nesting), then a
+`match value { "read" => ..., _ => ... }` form over strings and record tags.
+A full tagged-sum type is not needed for this demo.
+
+### F8. No boolean `&&`/`||` operators and no `str_trim` or list filter (awkward)
+
+Probe: `a && b` is `UnexpectedCharacter '&'`. The parser uses nested `if`
+and `break` inside `while` instead, and hand-writes `u:rtrim`, `u:ltrim`,
+and `u:split_words` (which collapses repeated spaces by rejoining through a
+string because string lists have no filter or append). Suggested
+improvements: `str_trim`, `str_starts_with`, and either `list_filter` /
+`list_push` or a whole-list `each` over string lists. `&&`/`||` on 0/1
+scalars would read better than nested conditionals but are not blocking.

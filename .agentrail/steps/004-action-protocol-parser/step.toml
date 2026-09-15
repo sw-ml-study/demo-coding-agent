@@ -1,6 +1,6 @@
 number = 4
 slug = "action-protocol-parser"
-status = "pending"
+status = "in-progress"
 description = "Implement agents/protocol.mlpl: u:parse_action(text) turns exactly one model ..."
 role = "production"
 context_files = []
