@@ -1,0 +1,1 @@
+RUN mlpl <path> implemented in pure MLPL (agents/tools.mlpl): allow-list function, run_script with captured events, rendered observation with per-test lines; loop routes run through it, other commands refused as observations. 7 tool tests plus 2 loop tests (64 total). Ledger records upstream status: F1-F5 queued, F2 first, fixes in parallel; keep workarounds.

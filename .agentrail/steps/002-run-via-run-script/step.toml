@@ -1,9 +1,10 @@
 number = 2
 slug = "run-via-run-script"
-status = "in-progress"
+status = "completed"
 description = "Implement RUN for MLPL projects in pure MLPL inside agents/loop.mlpl (or a ne..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T11:58:25"
+completed_at = "2026-09-15T12:52:38"
 task_type = "mlpl-agent"
-commits = []
+commits = ["67ccd6d81beec4047f20859d5dc7364a7fd7b432"]
