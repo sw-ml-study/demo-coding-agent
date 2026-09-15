@@ -1,8 +1,9 @@
 number = 7
 slug = "devstral-comparison"
-status = "in-progress"
+status = "completed"
 description = "Compare devstral:24b against the qwen2.5-coder:7b baseline on just mlpl-demo ..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T15:58:08"
-commits = []
+completed_at = "2026-09-15T15:59:37"
+commits = ["da3e960547ae3580c7ec339ebe7417484df9e985"]

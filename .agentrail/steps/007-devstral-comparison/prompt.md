@@ -1,0 +1,1 @@
+Compare devstral:24b against the qwen2.5-coder:7b baseline on just mlpl-demo and record it in docs/progression.md and the README model section (devstral needs about 14 GB, so it is an upgrade tier, not the floor). Tolerate a leading ACTION: header line in a model reply, which devstral copies from the transcript, with a protocol test first. Keep the gate green.

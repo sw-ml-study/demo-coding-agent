@@ -1,0 +1,1 @@
+devstral:24b on just mlpl-demo: nine steps then, after tolerating its copied ACTION: header (test first), the minimum six steps in 32 s with no slips; recorded against the 7B baseline in progression and README (upgrade tier, 14 GB). 78 tests.
