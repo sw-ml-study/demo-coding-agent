@@ -1,9 +1,10 @@
 number = 1
 slug = "mlpl-example-and-protocol-hardening"
-status = "in-progress"
+status = "completed"
 description = "Add examples/tiny-mlpl-project: lib.mlpl with a module comment and one docume..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T11:58:25"
+completed_at = "2026-09-15T12:05:54"
 task_type = "mlpl-agent"
-commits = []
+commits = ["03170d862ed790cd59f255954fce113cc8c84bc4"]

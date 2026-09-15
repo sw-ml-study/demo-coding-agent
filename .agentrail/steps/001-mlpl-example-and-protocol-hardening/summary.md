@@ -1,0 +1,1 @@
+Added examples/tiny-mlpl-project (lib.mlpl u:add, tests/test_add.mlpl, vendored mlplunit 0.1.0 a06191f with VENDOR.md pin) proven to run under run_script with captured PASS events; hardened WRITE parsing to drop outer fence lines with tests first and strictness tests; style check skips vendor; ledger F6 consequence recorded. 56 tests.
