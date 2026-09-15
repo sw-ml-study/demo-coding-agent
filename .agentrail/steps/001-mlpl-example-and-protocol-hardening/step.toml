@@ -1,0 +1,9 @@
+number = 1
+slug = "mlpl-example-and-protocol-hardening"
+status = "pending"
+description = "Add examples/tiny-mlpl-project: lib.mlpl with a module comment and one docume..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T11:58:25"
+task_type = "mlpl-agent"
+commits = []
