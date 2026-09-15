@@ -96,6 +96,35 @@ def u:test_reject_fenced_missing_end() {
   u:assert_err(u:parse_action("WRITE a.txt\n```\nbody\n```\nEND\nDONE x"), "action after END still rejected")
 }
 
+@test {name: "a fabricated OBSERVATION block after the action is ignored", tags: ["protocol", "habit"]}
+def u:test_parse_ignores_fabricated_observation() {
+  "Live models sometimes continue the transcript themselves; everything from an OBSERVATION: line on is dropped.";
+  a = unwrap(u:parse_action("WRITE a.txt\nbody\nEND\n\nOBSERVATION:\nwrote a.txt\n\nACTION:\nDONE fake"));
+  u:assert_text_eq(a.tool, "write", "write accepted")?;
+  u:assert_text_eq(a.body, "body\n", "body intact")?;
+  b = unwrap(u:parse_action("RUN mlpl t.mlpl\nOBSERVATION:\nstatus: ok"));
+  u:assert_text_eq(b.tool, "run", "run accepted")?;
+  c = unwrap(u:parse_action("READ a.txt\n\nOBSERVATION:"));
+  u:assert_text_eq(c.path, "a.txt", "read accepted")
+}
+
+@test {name: "a fabricated OBSERVATION does not rescue a missing END", tags: ["protocol", "reject", "habit"]}
+def u:test_reject_fabricated_observation_without_end() {
+  "Truncation happens only after a complete action.";
+  u:assert_err(u:parse_action("WRITE a.txt\nbody\nOBSERVATION:\nwrote a.txt"), "no END before the fake observation")
+}
+
+@test {name: "a fence after END and blank lines before an opening fence are tolerated", tags: ["protocol", "habit"]}
+def u:test_parse_write_fence_after_end() {
+  "Second live habit: blank line, opening fence, body, END, closing fence.";
+  a = unwrap(u:parse_action("WRITE a.mlpl\n\n```\nx = 1\nEND\n```\n"));
+  u:assert_text_eq(a.body, "x = 1\n", "opening fence after a blank line and closing fence after END dropped")?;
+  b = unwrap(u:parse_action("WRITE a.mlpl\n\n\n```mlpl\nx = 1\n```\nEND\n```"));
+  u:assert_text_eq(b.body, "x = 1\n", "both fences plus two blank lines dropped")?;
+  c = unwrap(u:parse_action("WRITE a.txt\n\nfirst line blank kept\nEND"));
+  u:assert_text_eq(c.body, "\nfirst line blank kept\n", "a leading blank line without a fence is content")
+}
+
 @test {name: "empty reply is rejected", tags: ["protocol", "reject"]}
 def u:test_reject_empty() {
   "An empty or whitespace-only reply is err naming empty reply.";

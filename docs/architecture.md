@@ -79,6 +79,14 @@ times and stops with `reason` set to `done`, `denied`, or `budget`. Every
 stop reason is a value, not an exception; a malformed reply or a failed
 builtin becomes a `PARSE ERROR:` or `ERROR:` observation for the next turn.
 
+DONE is gated. The loop takes an injected `verify(state)` function next to
+`decide`: `u:verify_always` accepts any DONE; `u:verify_tests_passed`
+requires at least one successful WRITE and, after the last WRITE, a RUN
+observation with `status: ok` and no `failed:` line. A DONE without that
+evidence becomes a `NOT VERIFIED: <reason>` observation and the loop
+continues. This came from live runs in which the model fabricated
+observations and declared success; see the progression doc.
+
 ## The action protocol
 
 The model answers with exactly one action in plain text:
@@ -103,9 +111,13 @@ CRLF is normalized; the body keeps its inner newlines. Model habits seen in
 live transcripts and now tolerated, each pinned by a test: a fence-only line
 (three backticks, optionally with a language word) directly after
 `WRITE <path>` and directly before `END` is dropped; fences inside the body
-are content. Habits seen and deliberately not tolerated: a body without
-`END`, `DONE` on the line after a body, and `END` sent as its own turn; the
-system prompt in `prompts/act.md` forbids them instead. Later sagas may add
+are content; blank lines before an opening fence and a fence-only line after
+`END` are also dropped; everything from a fabricated `OBSERVATION:` line
+onward is ignored once the action is complete. Habits seen and deliberately
+not tolerated: a body without `END`, `DONE` on the line after a body, `END`
+sent as its own turn, and `READ <path> END`; the system prompt in
+`prompts/act.md` forbids them instead, using `<path>` placeholders because a
+concrete example path was copied verbatim by the 7B model. Later sagas may add
 `PATCH` with exact old/new text. This is the place where tagged sum values
 would help MLPL; the records-plus-`Result` encoding is recorded as awkward,
 not blocking, in the capability ledger.

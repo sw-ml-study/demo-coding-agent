@@ -104,6 +104,52 @@ def u:stopped(state, iteration, reason, answer) {
   {task: state.task, iteration: iteration, history: state.history, files: state.files, budget: state.budget, done: 1, reason: reason, answer: answer}
 }
 
+def u:last_index(s, needle) {
+  "Character index of the last occurrence of needle in s, or -1.";
+  found = -1;
+  offset = 0;
+  rest = s;
+  while 1 {
+    at = str_find(rest, needle);
+    if at < 0 {
+      break
+    } else {
+      found = offset + at;
+      offset = offset + at + str_len(needle);
+      rest = str_slice(s, offset, str_len(s))
+    }
+  };
+  found
+}
+
+def u:verify_always(state) {
+  "Accept every DONE; the default when a task names no evidence.";
+  ok(1)
+}
+
+def u:verify_tests_passed(state) {
+  "Accept DONE only after at least one successful WRITE and a RUN with status: ok and no failed test after the last WRITE.";
+  last_write = u:last_index(state.history, "\nACTION:\nWRITE ");
+  last_ok = u:last_index(state.history, "\nOBSERVATION:\nstatus: ok");
+  if str_find(state.history, "\nOBSERVATION:\nwrote ") < 0 {
+    err("no file has been written yet")
+  } else {
+    if last_ok < 0 {
+      err("no RUN observation with status: ok yet")
+    } else {
+      if last_ok < last_write {
+        err("files changed after the last passing RUN; run the tests again")
+      } else {
+        if str_find(str_slice(state.history, last_ok, str_len(state.history) - last_ok), "failed: ") >= 0 {
+          err("the last RUN reported a failed test")
+        } else {
+          ok(1)
+        }
+      }
+    }
+  }
+}
+
 def u:approved(verdict, action, decide) {
   "1 when the verdict is allow, or ask and the injected decision says yes.";
   if str_eq(verdict, "allow") {
@@ -117,7 +163,7 @@ def u:approved(verdict, action, decide) {
   }
 }
 
-def u:loop_step(state, ask, permissions, decide) {
+def u:loop_step(state, ask, permissions, decide, verify) {
   "One observe, decide, act, update transition; every outcome is a state value.";
   reply = call(ask, u:build_context(state));
   parsed = u:parse_action(reply);
@@ -126,7 +172,12 @@ def u:loop_step(state, ask, permissions, decide) {
   } else {
     action = unwrap(parsed);
     if str_eq(action.tool, "done") {
-      u:stopped(state, state.iteration + 1, "done", action.summary)
+      evidence = call(verify, state);
+      if is_ok(evidence) {
+        u:stopped(state, state.iteration + 1, "done", action.summary)
+      } else {
+        u:advanced(state, reply, str_concat("NOT VERIFIED: ", err_message(evidence)), "")
+      }
     } else {
       if u:approved(u:authorize(action, permissions), action, decide) {
         u:advanced(state, reply, u:execute(action), u:touched_path(action))
@@ -137,14 +188,14 @@ def u:loop_step(state, ask, permissions, decide) {
   }
 }
 
-def u:run_loop(task, budget, ask, permissions, decide) {
-  "Run steps until done, denied, or the budget is spent; returns the final state.";
+def u:run_loop(task, budget, ask, permissions, decide, verify) {
+  "Run steps until a verified done, a denial, or the spent budget; returns the final state.";
   state = u:loop_initial_state(task, budget);
   while state.done == 0 {
     if state.iteration >= state.budget {
       state = u:stopped(state, state.iteration, "budget", "")
     } else {
-      state = u:loop_step(state, ask, permissions, decide)
+      state = u:loop_step(state, ask, permissions, decide, verify)
     }
   };
   state

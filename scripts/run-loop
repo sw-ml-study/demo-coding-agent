@@ -9,5 +9,6 @@ set -- $("$repo_dir/scripts/check-ollama")
 task=${LOOP_TASK:-Read examples/tiny-rust-project/src/lib.rs and write tests/scratch/NOTES.md with a one-paragraph description of the crate.}
 budget=${LOOP_BUDGET:-8}
 approve=${LOOP_APPROVE:-0}
+verify=${LOOP_VERIFY:-always}
 
-exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_loop.mlpl" -- "$1" "$2" "$task" "$budget" "$approve"
+exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_loop.mlpl" -- "$1" "$2" "$task" "$budget" "$approve" "$verify"

@@ -190,7 +190,12 @@ and the reviewer never writes.
 
 Add, each as a tested pure function over state: token and context budget,
 bounded history compaction, repeated-action loop detection, retry budget for
-malformed model output, and cancellation. Document which OpenCode features are
+malformed model output, cancellation, and verified completion. Verified
+completion comes from the first live MLPL run, where qwen2.5-coder:7b
+replied DONE claiming the tests passed after a rejected WRITE and no RUN at
+all: a DONE is accepted only when the evidence the task names (a RUN
+observation with `status: ok`, or a successful write) is present in the
+history; otherwise the loop observes "not verified" and continues. Document which OpenCode features are
 deliberately still absent and why.
 
 Exit: the agent fails loudly and cheaply on a task it cannot finish.

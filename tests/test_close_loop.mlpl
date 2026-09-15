@@ -1,0 +1,67 @@
+# Prove the full coding loop on the MLPL target: read, write code and test, run, pass, done; then restore.
+include "agents/loop.mlpl";
+
+def u:lib_path() {
+  "Path of the example library.";
+  "examples/tiny-mlpl-project/lib.mlpl"
+}
+
+def u:test_path() {
+  "Path of the example test file.";
+  "examples/tiny-mlpl-project/tests/test_add.mlpl"
+}
+
+def u:new_lib() {
+  "The library the scripted model writes: add kept, mul added.";
+  str_join(["# Tiny MLPL project the coding agent edits: one documented function to start.", "", "def u:add(a, b) {", "  \"Add two numbers.\";", "  a + b", "}", "", "def u:mul(a, b) {", "  \"Multiply two numbers.\";", "  a * b", "}"], "\n")
+}
+
+def u:new_tests() {
+  "The test file the scripted model writes: includes kept, add test kept, mul test added.";
+  str_join(["# Tests for the tiny MLPL project; runnable by mlplunit or by run_script via the vendored library.", "include \"../vendor/mlplunit.mlpl\";", "include \"../lib.mlpl\";", "", "@test {name: \"add sums two numbers\", tags: [\"add\"]}", "def u:test_add() {", "  \"Prove u:add on small integers.\";", "  u:assert_eq(u:add(2, 3), 5, \"2 + 3\")?;", "  u:assert_eq(u:add(-1, 1), 0, \"-1 + 1\")", "}", "", "@test {name: \"mul multiplies two numbers\", tags: [\"mul\"]}", "def u:test_mul() {", "  \"Prove u:mul on small integers.\";", "  u:assert_eq(u:mul(2, 3), 6, \"2 * 3\")?;", "  u:assert_eq(u:mul(-1, 4), -4, \"-1 * 4\")", "}", "", "u:run_registered_tests()"], "\n")
+}
+
+def u:transcript_add_mul() {
+  "Six turns: read both files, write both, run the tests, finish.";
+  call(:u:ask_transcript, [str_concat("READ ", u:lib_path()), str_concat("READ ", u:test_path()), str_join([str_concat("WRITE ", u:lib_path()), u:new_lib(), "END"], "\n"), str_join([str_concat("WRITE ", u:test_path()), u:new_tests(), "END"], "\n"), str_concat("RUN mlpl ", u:test_path()), "DONE added u:mul and its test; all tests pass"])
+}
+
+def u:restore(path, original) {
+  "Write the original text back and prove it round-tripped.";
+  write_atomic(path, original)?;
+  if str_eq(unwrap(read_text(path)), original) {
+    ok(1)
+  } else {
+    err(str_concat("restore failed: ", path))
+  }
+}
+
+@test {name: "the agent adds u:mul with a passing test on the MLPL target", tags: ["close-loop", "mlpl"]}
+def u:test_close_loop_mlpl() {
+  "Scripted end to end: both files change, RUN observes two passed tests, DONE; the example is restored.";
+  original_lib = unwrap(read_text(u:lib_path()));
+  original_tests = unwrap(read_text(u:test_path()));
+  permissions = {read: "allow", search: "allow", write: "ask", run: "allow"};
+  final = u:run_loop("add u:mul with a test and make the tests pass", 10, u:transcript_add_mul(), permissions, :u:decide_yes, :u:verify_tests_passed);
+  outcome_lib = read_text(u:lib_path());
+  outcome_tests = read_text(u:test_path());
+  u:restore(u:lib_path(), original_lib)?;
+  u:restore(u:test_path(), original_tests)?;
+  u:assert_text_eq(final.reason, "done", "finished")?;
+  u:assert_eq(final.iteration, 6, "six steps")?;
+  u:assert_text_eq(unwrap(outcome_lib), str_concat(u:new_lib(), "\n"), "library written with trailing newline")?;
+  u:assert_text_eq(unwrap(outcome_tests), str_concat(u:new_tests(), "\n"), "tests written with trailing newline")?;
+  u:assert_true(str_find(final.history, "status: ok") > 0, "run status ok")?;
+  u:assert_true(str_find(final.history, "passed: add sums two numbers") > 0, "add still passes")?;
+  u:assert_true(str_find(final.history, "passed: mul multiplies two numbers") > 0, "mul passes")?;
+  u:assert_eq(str_find(final.history, "failed:"), -1, "nothing failed")
+}
+
+@test {name: "the example project is pristine after the close-loop test", tags: ["close-loop", "restore"]}
+def u:test_example_restored() {
+  "The committed target must not carry u:mul; the agent adds it at run time only.";
+  u:assert_eq(str_find(unwrap(read_text(u:lib_path())), "u:mul"), -1, "no mul in lib")?;
+  u:assert_eq(str_find(unwrap(read_text(u:test_path())), "u:mul"), -1, "no mul in tests")
+}
+
+u:run_registered_tests()

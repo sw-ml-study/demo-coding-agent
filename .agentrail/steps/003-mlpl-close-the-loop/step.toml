@@ -1,6 +1,6 @@
 number = 3
 slug = "mlpl-close-the-loop"
-status = "pending"
+status = "in-progress"
 description = "Close the loop on the MLPL target. Add a just recipe (just mlpl-demo or LOOP_..."
 role = "production"
 context_files = []

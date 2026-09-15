@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+# Opt-in live demo: the agent adds u:mul and its test to the MLPL example,
+# runs the tests, and finishes when they pass. Writes are approved. The
+# transcript is saved under fixtures/transcripts/ and the example project is
+# restored afterwards (tracked files reset, new files under it removed).
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+model=$("$repo_dir/scripts/check-ollama" | sed -n 2p)
+slug=$(printf '%s' "$model" | tr ':/' '--')
+out=$repo_dir/fixtures/transcripts/mlpl-mul-$slug.txt
+task="Add u:mul(a, b), which multiplies two numbers, to examples/tiny-mlpl-project/lib.mlpl, keeping u:add and the module comment. Add a test for u:mul to examples/tiny-mlpl-project/tests/test_add.mlpl, keeping the two include lines and the existing test. Then run the tests with: RUN mlpl examples/tiny-mlpl-project/tests/test_add.mlpl. Reply DONE only after the run observation shows status: ok with every test passed."
+
+mkdir -p "$repo_dir/fixtures/transcripts"
+status=0
+LOOP_TASK="$task" LOOP_BUDGET="${LOOP_BUDGET:-12}" LOOP_APPROVE=1 LOOP_VERIFY=tests \
+    "$repo_dir/scripts/run-loop" 2>&1 | tee "$out" || status=$?
+
+git -C "$repo_dir" checkout -q -- examples/tiny-mlpl-project
+git -C "$repo_dir" clean -fdq -- examples/tiny-mlpl-project
+echo "restored examples/tiny-mlpl-project"
+echo "transcript: ${out#"$repo_dir/"}"
+exit "$status"

@@ -1,0 +1,95 @@
+model: qwen2.5-coder:7b
+task: Add u:mul(a, b), which multiplies two numbers, to examples/tiny-mlpl-project/lib.mlpl, keeping u:add and the module comment. Add a test for u:mul to examples/tiny-mlpl-project/tests/test_add.mlpl, keeping the two include lines and the existing test. Then run the tests with: RUN mlpl examples/tiny-mlpl-project/tests/test_add.mlpl. Reply DONE only after the run observation shows status: ok with every test passed.
+budget: 12 approve writes: 1 verify: tests
+
+
+ACTION:
+READ examples/tiny-mlpl-project/lib.mlpl
+
+OBSERVATION:
+# Tiny MLPL project the coding agent edits: one documented function to start.
+
+def u:add(a, b) {
+  "Add two numbers.";
+  a + b
+}
+
+
+
+ACTION:
+WRITE examples/tiny-mlpl-project/lib.mlpl
+# Tiny MLPL project the coding agent edits: one documented function to start.
+
+def u:add(a, b) {
+  "Add two numbers.";
+  a + b
+}
+
+def u:mul(a, b) {
+  "Multiply two numbers.";
+  a * b
+}
+END
+
+OBSERVATION:
+wrote examples/tiny-mlpl-project/lib.mlpl
+
+
+ACTION:
+READ examples/tiny-mlpl-project/tests/test_add.mlpl
+
+OBSERVATION:
+# Tests for the tiny MLPL project; runnable by mlplunit or by run_script via the vendored library.
+include "../vendor/mlplunit.mlpl";
+include "../lib.mlpl";
+
+@test {name: "add sums two numbers", tags: ["add"]}
+def u:test_add() {
+  "Prove u:add on small integers.";
+  u:assert_eq(u:add(2, 3), 5, "2 + 3")?;
+  u:assert_eq(u:add(-1, 1), 0, "-1 + 1")
+}
+
+u:run_registered_tests()
+
+
+
+ACTION:
+WRITE examples/tiny-mlpl-project/tests/test_add.mlpl
+# Tests for the tiny MLPL project; runnable by mlplunit or by run_script via the vendored library.
+include "../vendor/mlplunit.mlpl";
+include "../lib.mlpl";
+
+@test {name: "add sums two numbers", tags: ["add"]}
+def u:test_add() {
+  "Prove u:add on small integers.";
+  u:assert_eq(u:add(2, 3), 5, "2 + 3")?;
+  u:assert_eq(u:add(-1, 1), 0, "-1 + 1")
+}
+
+@test {name: "mul multiplies two numbers", tags: ["mul"]}
+def u:test_mul() {
+  "Prove u:mul on small integers."
+  u:assert_eq(u:mul(2, 3), 6, "2 * 3")?;
+  u:assert_eq(u:mul(-1, 2), -2, "-1 * 2")
+}
+
+u:run_registered_tests()
+END
+
+OBSERVATION:
+wrote examples/tiny-mlpl-project/tests/test_add.mlpl
+
+
+ACTION:
+RUN mlpl examples/tiny-mlpl-project/tests/test_add.mlpl
+
+OBSERVATION:
+status: ok
+value: ok({expected_failures: array[] [0], passed: array[] [2], skipped: array[] [0], tests: array[] [2]})
+passed: add sums two numbers
+passed: mul multiplies two numbers
+
+stopped after 6 step(s): done
+All tests passed successfully.
+done

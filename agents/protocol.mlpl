@@ -164,17 +164,26 @@ def u:first_content_line(lines) {
 }
 
 def u:rest_after(lines, start) {
-  "err if any non-blank line follows start; ok(1) otherwise.";
+  "ok(1) when only blanks, fence lines, or a fabricated OBSERVATION: block follow start; err otherwise.";
   n = list_len(lines);
   i = start;
   result = ok(1);
   while i < n {
     line = u:trim(unwrap(list_get(lines, i)));
+    line = if u:is_fence_line(line) {
+      ""
+    } else {
+      line
+    };
     if str_len(line) > 0 {
-      result = if u:is_verb_line(line) {
-        err("more than one action")
+      result = if str_eq(line, "OBSERVATION:") {
+        ok(1)
       } else {
-        err(str_concat("unexpected text after action: ", line))
+        if u:is_verb_line(line) {
+          err("more than one action")
+        } else {
+          err(str_concat("unexpected text after action: ", line))
+        }
       };
       i = n
     } else {
@@ -211,10 +220,18 @@ def u:join_lines(lines, first, last) {
 }
 
 def u:strip_outer_fences(lines, first, last) {
-  "Body text for lines[first, last) with a fence-only first and last line dropped; inner fences are content.";
-  from = if last > first {
-    if u:is_fence_line(unwrap(list_get(lines, first))) {
-      first + 1
+  "Body text for lines[first, last): leading blanks plus an opening fence and a closing fence are dropped; inner fences are content.";
+  lead = first;
+  while lead < last {
+    if str_len(u:trim(unwrap(list_get(lines, lead)))) == 0 {
+      lead = lead + 1
+    } else {
+      break
+    }
+  };
+  from = if lead < last {
+    if u:is_fence_line(unwrap(list_get(lines, lead))) {
+      lead + 1
     } else {
       first
     }

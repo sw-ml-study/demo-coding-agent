@@ -46,7 +46,7 @@ def u:test_ask_transcript() {
 @test {name: "loop reads, writes, and finishes with DONE", tags: ["loop", "flow"]}
 def u:test_loop_read_write_done() {
   "End to end with allow-all: three steps, file written, history carries the source, files lists both paths.";
-  final = u:run_loop("make a note", 6, u:transcript_write_note(), u:allow_all(), :u:decide_no);
+  final = u:run_loop("make a note", 6, u:transcript_write_note(), u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(final.reason, "done", "stop reason")?;
   u:assert_eq(final.iteration, 3, "three steps")?;
   u:assert_text_eq(final.answer, "wrote a note", "summary is the answer")?;
@@ -61,7 +61,7 @@ def u:test_loop_read_write_done() {
 def u:test_loop_denied_write() {
   "With write: deny the second step stops with reason denied and no file appears.";
   permissions = {read: "allow", search: "allow", write: "deny", run: "allow"};
-  final = u:run_loop("make a note", 6, u:transcript_write_note(), permissions, :u:decide_yes);
+  final = u:run_loop("make a note", 6, u:transcript_write_note(), permissions, :u:decide_yes, :u:verify_always);
   u:assert_text_eq(final.reason, "denied", "stop reason")?;
   u:assert_eq(final.iteration, 2, "stopped on the write")?;
   u:assert_eq(str_find(final.answer, "denied: WRITE tests/scratch/loop-note.txt"), 0, "answer names the action")?;
@@ -71,10 +71,10 @@ def u:test_loop_denied_write() {
 @test {name: "ask resolves through the injected decision", tags: ["loop", "policy", "ask"]}
 def u:test_loop_ask_decision() {
   "Refused ask stops as denied; approved ask writes and finishes.";
-  refused = u:run_loop("make a note", 6, u:transcript_write_note(), u:ask_writes(), :u:decide_no);
+  refused = u:run_loop("make a note", 6, u:transcript_write_note(), u:ask_writes(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(refused.reason, "denied", "refused")?;
   u:assert_err(read_text("tests/scratch/loop-note.txt"), "refused write absent")?;
-  approved = u:run_loop("make a note", 6, u:transcript_write_note(), u:ask_writes(), :u:decide_yes);
+  approved = u:run_loop("make a note", 6, u:transcript_write_note(), u:ask_writes(), :u:decide_yes, :u:verify_always);
   u:assert_text_eq(approved.reason, "done", "approved")?;
   u:assert_ok(read_text("tests/scratch/loop-note.txt"), "approved write present")?;
   u:assert_ok(remove_path("tests/scratch/loop-note.txt"), "cleanup")
@@ -84,7 +84,7 @@ def u:test_loop_ask_decision() {
 def u:test_loop_budget() {
   "A model that never finishes is cut off after budget steps with reason budget.";
   ask = call(:u:ask_transcript, ["READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt", "READ tests/fixtures/plain.txt"]);
-  final = u:run_loop("loop forever", 3, ask, u:allow_all(), :u:decide_no);
+  final = u:run_loop("loop forever", 3, ask, u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(final.reason, "budget", "stop reason")?;
   u:assert_eq(final.iteration, 3, "exactly budget steps")?;
   u:assert_eq(u:count_occurrences(final.history, "\nACTION:\n"), 3, "three actions recorded")
@@ -94,7 +94,7 @@ def u:test_loop_budget() {
 def u:test_loop_parse_error_continues() {
   "The model sees its own protocol mistake and can recover within the budget.";
   ask = call(:u:ask_transcript, ["Sure, let me look.", "DONE recovered"]);
-  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
+  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(final.reason, "done", "recovered")?;
   u:assert_eq(final.iteration, 2, "two steps")?;
   u:assert_true(str_find(final.history, "PARSE ERROR: unknown verb: Sure, let me look.") > 0, "parse error observed")
@@ -104,7 +104,7 @@ def u:test_loop_parse_error_continues() {
 def u:test_loop_read_error_observed() {
   "Builtin errs flow into history as text so the model can choose again.";
   ask = call(:u:ask_transcript, ["READ examples/tiny-rust-project/src/nope.rs", "DONE gave up"]);
-  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
+  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(final.reason, "done", "finished")?;
   u:assert_true(str_find(final.history, "ERROR: read_text:") > 0, "error observed")
 }
@@ -113,7 +113,7 @@ def u:test_loop_read_error_observed() {
 def u:test_loop_unavailable_tools() {
   "Until the extension exists SEARCH observes a placeholder; RUN outside the allow-list is refused, not executed.";
   ask = call(:u:ask_transcript, ["SEARCH pub fn", "RUN cargo test", "DONE ok"]);
-  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no);
+  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_true(str_find(final.history, "search is not available yet") > 0, "search placeholder")?;
   u:assert_true(str_find(final.history, "run: command not allowed: cargo test") > 0, "run refused")?;
   u:assert_text_eq(final.files, "", "no files touched")
@@ -123,10 +123,40 @@ def u:test_loop_unavailable_tools() {
 def u:test_loop_run_mlpl() {
   "The loop's RUN reaches run_script and the model sees status and per-test lines.";
   ask = call(:u:ask_transcript, ["RUN mlpl examples/tiny-mlpl-project/tests/test_add.mlpl", "DONE tests pass"]);
-  final = u:run_loop("run the tests", 4, ask, u:allow_all(), :u:decide_no);
+  final = u:run_loop("run the tests", 4, ask, u:allow_all(), :u:decide_no, :u:verify_always);
   u:assert_text_eq(final.reason, "done", "finished")?;
   u:assert_true(str_find(final.history, "status: ok") > 0, "status observed")?;
   u:assert_true(str_find(final.history, "passed: add sums two numbers") > 0, "test line observed")
+}
+
+@test {name: "verify_tests_passed reads the evidence from history", tags: ["loop", "verify"]}
+def u:test_verify_tests_passed() {
+  "No run, a run before the last write, a failed test, and a clean run after the last write.";
+  base = u:loop_initial_state("t", 5);
+  u:assert_err(u:verify_tests_passed(base), "empty history")?;
+  ran_only = u:advanced(base, "RUN mlpl t.mlpl", "status: ok\npassed: a", "");
+  u:assert_err(u:verify_tests_passed(ran_only), "passing run but nothing written")?;
+  ran_then_wrote = u:advanced(ran_only, "WRITE a.txt\nx\nEND", "wrote a.txt", "a.txt");
+  u:assert_err(u:verify_tests_passed(ran_then_wrote), "write after run")?;
+  wrote = u:advanced(base, "WRITE a.txt\nx\nEND", "wrote a.txt", "a.txt");
+  failed = u:advanced(wrote, "RUN mlpl t.mlpl", "status: err\npassed: a\nfailed: b -- boom", "");
+  u:assert_err(u:verify_tests_passed(failed), "status err")?;
+  ok_but_failed = u:advanced(wrote, "RUN mlpl t.mlpl", "status: ok\nfailed: b -- boom", "");
+  u:assert_err(u:verify_tests_passed(ok_but_failed), "failed line after status")?;
+  clean = u:advanced(ran_then_wrote, "RUN mlpl t.mlpl", "status: ok\npassed: a\npassed: b", "");
+  u:assert_ok(u:verify_tests_passed(clean), "run after write, all passed")
+}
+
+@test {name: "an unverified DONE becomes an observation and the loop continues", tags: ["loop", "verify"]}
+def u:test_loop_unverified_done_continues() {
+  "The model claims success without running; the loop says NOT VERIFIED, then accepts DONE after a passing RUN.";
+  ask = call(:u:ask_transcript, ["DONE all tests pass", "WRITE tests/scratch/verify-note.txt\nnote\nEND", "RUN mlpl examples/tiny-mlpl-project/tests/test_add.mlpl", "DONE now they really pass"]);
+  final = u:run_loop("run the tests", 6, ask, u:allow_all(), :u:decide_no, :u:verify_tests_passed);
+  u:assert_ok(remove_path("tests/scratch/verify-note.txt"), "cleanup")?;
+  u:assert_text_eq(final.reason, "done", "eventually done")?;
+  u:assert_eq(final.iteration, 4, "four steps")?;
+  u:assert_true(str_find(final.history, "NOT VERIFIED: no file has been written yet") > 0, "first DONE refused")?;
+  u:assert_text_eq(final.answer, "now they really pass", "second DONE accepted")
 }
 
 u:run_registered_tests()

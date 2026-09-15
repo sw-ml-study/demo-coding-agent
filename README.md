@@ -181,10 +181,26 @@ Tests drive the loop with a scripted transcript model that picks its reply
 by counting prior actions in the prompt, so every stop reason, the ask
 decision, parse-error recovery, and read errors are proven offline.
 
+## Watch it code
+
+```sh
+just mlpl-demo
+```
+
+The agent adds `u:mul` and a test to `examples/tiny-mlpl-project`, runs the
+tests with `RUN mlpl ...`, and finishes only when a RUN observation shows
+every test passed. With `qwen2.5-coder:7b` this takes six steps: read, write,
+read, write, run, done. The transcript is saved under
+`fixtures/transcripts/` and the example project is restored afterwards.
+DONE is gated by an injected verify function, so a model that claims success
+without evidence is told `NOT VERIFIED` and keeps working. The six live
+attempts it took to get here, and what each one changed, are in
+[progression](docs/progression.md).
+
 ## Tests and probes
 
 ```sh
-just tests        # 64 native mlplunit tests, no model server needed
+just tests        # 71 native mlplunit tests, no model server needed
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 
@@ -198,11 +214,13 @@ target for the Rust extension path.
 
 ## Current status
 
-Saga 1 is complete: foundation, measured builtins, the v0 read/think agent,
-the action protocol parser, and the bounded read/write loop with allow, ask,
-and deny permissions, all without Rust. The
+The agent codes. Saga 1 built the loop, the parser, and permissions; Saga 2
+has so far added the MLPL example project, `RUN mlpl` through `run_script`,
+verified completion, and a live run in which `qwen2.5-coder:7b` added a
+function and a passing test, all without Rust. Next is the VHS recording of
+that run, then the Rust `agent-tools` extension for ripgrep search,
+allow-listed `cargo` and `git`, and the Rust example. The
 [capability ledger](docs/sw-mlpl-capabilities.md) records measured rows and
-eight findings for sw-MLPL. Saga 2 adds the Rust `agent-tools` extension for
-ripgrep search, allow-listed process execution, and git.
+eight findings for sw-MLPL.
 
 Copyright (c) 2026 Michael A Wright. Distributed under the [MIT License](LICENSE).

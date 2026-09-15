@@ -7,8 +7,9 @@ reader can diff the loop as it gains capability.
 |---------|-------------------------------------------|-----------------------------|------|
 | v0      | READ, THINK (done)                        | `read_text`                 | 1    |
 | v2      | bounded READ, WRITE loop, allow/ask/deny (done) | `write_atomic`, history, stop reasons | 1 |
+| v3      | RUN mlpl, verified DONE, live coding on the MLPL target (done) | `run_script`, injected verify | 2 |
 | v1      | SEARCH                                    | ripgrep-backed `search` via extension | 2 |
-| v3      | RUN, repeat until tests pass              | allow-listed `run` via extension | 2 |
+| v3b     | RUN cargo, repeat until Rust tests pass   | allow-listed `run` via extension | 2 |
 | v4      | planner, builder, reviewer                | per-agent permissions       | 3    |
 | v5      | budgets, compaction, loop detection       | pure policy functions       | 4    |
 | v6      | git diff and status, exact patch          | extension                   | 2, 4 |
@@ -22,6 +23,29 @@ OpenAI-compatible chat endpoint so any hosted model can drive the same loop
 through the existing model-injection seam. A TUI is replaced by Emacs:
 sw-MLPL's org-babel backend already runs `#+begin_src mlpl` blocks, which is
 a lighter path to an interactive front end than a terminal UI.
+
+## First live coding run on the MLPL target
+
+Task: add `u:mul` and its test to `examples/tiny-mlpl-project`, run the
+tests, finish when they pass. Model: `qwen2.5-coder:7b`, budget 12, writes
+approved, verify mode `tests`. Six attempts on 2026-09-15, each one changing
+exactly one thing after reading the transcript:
+
+| attempt | what the model did | what changed after it |
+|---------|--------------------|-----------------------|
+| 1 | Rewrote `lib.mlpl` without `def`; put a fabricated `OBSERVATION: wrote ...` inside its test WRITE so it was rejected; replied DONE claiming the tests passed with no RUN | Parser drops everything from a fabricated `OBSERVATION:` line on (tested); prompt forbids writing observations and demands verbatim rewrites |
+| 2 | Wrote `blank line, fence, body, END, fence`; every WRITE rejected; RUN passed on the unchanged files; DONE claimed `u:mul` was added | Parser tolerates blanks before an opening fence and a fence after END (tested) |
+| 3 | One reply contained the WRITE, a fabricated observation, a fabricated RUN, and a fabricated result; then DONE | Verified completion: DONE is accepted only when an injected verify function finds the evidence in history, else the loop observes `NOT VERIFIED` and continues |
+| 4 | `READ <path> END` on one line; fabricated `ERROR: write_file: File already exists.` inside a WRITE; every WRITE missing END; RUN passed on unchanged files; DONE accepted because tests did pass | Verifier also requires at least one successful WRITE before the passing RUN |
+| 5 | Prompt rewritten as concrete examples: the model copied the example path `src/lib.mlpl` verbatim for every action and exhausted the budget on missing-directory errors | Prompt uses `<path>` placeholders in every example plus one worked WRITE body |
+| 6 | READ lib, WRITE lib with `u:add` kept and `u:mul` added, READ tests, WRITE tests with the includes and both tests, RUN, both passed, DONE | Nothing. The saved transcript is `fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt` |
+
+Steps in the successful run: six, the minimum. Protocol mistakes in that
+run: none. One style slip: the `u:mul` test docstring lacks its trailing
+`;`, which MLPL accepts because a newline also separates statements. What the failures taught: a 7B model follows a text protocol
+only with placeholder examples, a forbidden-continuation rule, and a loop
+that refuses unverified success. Fabricated observations are the dominant
+failure and the verifier is what makes the demo honest.
 
 ## Demo recording
 

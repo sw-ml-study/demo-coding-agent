@@ -11,7 +11,8 @@ for path in AGENTS.md COPYRIGHT LICENSE README.md justfile \
     agents/v0_read_think.mlpl agents/run_v0.mlpl agents/protocol.mlpl agents/loop.mlpl \
     agents/run_loop.mlpl agents/model.mlpl agents/tools.mlpl prompts/think.md prompts/act.md assets/mlplcode-logo.png \
     examples/tiny-mlpl-project/lib.mlpl examples/tiny-mlpl-project/tests/test_add.mlpl \
-    examples/tiny-mlpl-project/vendor/mlplunit.mlpl examples/tiny-mlpl-project/vendor/VENDOR.md; do
+    examples/tiny-mlpl-project/vendor/mlplunit.mlpl examples/tiny-mlpl-project/vendor/VENDOR.md \
+    fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt scripts/run-mlpl-demo; do
     if [ ! -f "$repo_dir/$path" ]; then
         echo "missing required file: $path" >&2
         exit 1

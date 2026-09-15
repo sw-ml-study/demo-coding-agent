@@ -24,7 +24,10 @@ Progress: step 001 added `examples/tiny-mlpl-project` (runs under
 and hardened the protocol against fenced WRITE bodies with tests for each
 habit and for the strict rejections. Step 002 made `RUN mlpl <path>` real in
 pure MLPL: an allow-list function, `run_script` with captured events, and a
-rendered observation with one line per finished test.
+rendered observation with one line per finished test. Step 003 closed the
+loop live: after six attempts (fabricated observations, fence habits, false
+DONE) the loop gained verified completion and `qwen2.5-coder:7b` added
+`u:mul` with a passing test in six steps; the transcript is a fixture.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

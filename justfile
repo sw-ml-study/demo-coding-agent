@@ -44,6 +44,10 @@ v0:
 loop:
     ./scripts/run-loop
 
+# Opt-in live demo: the agent adds u:mul plus a test to the MLPL example and makes the tests pass.
+mlpl-demo:
+    ./scripts/run-mlpl-demo
+
 # Run the complete precommit gate.
 check:
     ./scripts/check
