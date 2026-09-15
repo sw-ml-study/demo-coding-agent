@@ -98,9 +98,12 @@ awkward, not blocking.
 ## Model injection
 
 `llm_call` needs a running server, so no test calls it directly. Agents take
-the model as a function reference (`:u:ask_live` or `:u:ask_scripted`). The
-scripted model replays a fixed transcript of replies, which makes every loop
-test deterministic and offline. Live runs are `just` recipes that read
+the model as a one-argument callable from prompt to reply. Measured shape in
+v0: `call(:u:ask_live, host, model, system)` returns a partial (data, not a
+closure) that the agent invokes with `call(ask, prompt)`; tests bind
+`call(:u:ask_scripted, reply)` for a fixed answer or pass `:u:ask_echo` to
+read back the exact prompt. A scripted model replays a fixed transcript of
+replies, which makes every loop test deterministic and offline. Live runs are `just` recipes that read
 `OLLAMA_HOST` and `OLLAMA_MODEL`, defaulting to `http://localhost:11434` and
 `qwen2.5-coder:7b`, and pass them to `llm_call` explicitly; there are no
 implicit lookups inside the agent. A later provider function for an

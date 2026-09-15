@@ -1,0 +1,22 @@
+# Live entry for the v0 agent: mlpl-repl --source-dir <repo> -f agents/run_v0.mlpl -- HOST MODEL [FILE] [TASK]
+include "v0_read_think.mlpl";
+
+host = unwrap_or(list_get(args(), 0), "http://localhost:11434");
+model = unwrap_or(list_get(args(), 1), "qwen2.5-coder:7b");
+path = unwrap_or(list_get(args(), 2), "examples/tiny-rust-project/src/lib.rs");
+task = unwrap_or(list_get(args(), 3), "Explain what this file does, then name the single most useful unit test it is missing.");
+
+system = unwrap(u:v0_system_prompt());
+ask = call(:u:ask_live, host, model, system);
+answer = u:v0_think(task, path, ask);
+
+print("model:", model);
+print("file:", path);
+print("task:", task);
+print("");
+if is_ok(answer) {
+  print(unwrap(answer))
+} else {
+  print("error:", err_message(answer))
+};
+is_ok(answer)

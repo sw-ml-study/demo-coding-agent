@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+# Opt-in live run of the v0 read/think agent. Never part of `just check`.
+# V0_FILE and V0_TASK override the file read and the task asked.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+mlpl=$("$repo_dir/scripts/select-mlpl")
+set -- $("$repo_dir/scripts/check-ollama")
+file=${V0_FILE:-examples/tiny-rust-project/src/lib.rs}
+task=${V0_TASK:-Explain what this file does, then name the single most useful unit test it is missing.}
+
+exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_v0.mlpl" -- "$1" "$2" "$file" "$task"

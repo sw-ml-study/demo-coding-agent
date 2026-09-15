@@ -1,6 +1,9 @@
 # demo-coding-agent
 
-A coding agent small enough to understand, written in sw-MLPL.
+<img src="assets/mlplcode-logo.png" alt="mlplcode badge: Software Wrighter" width="160" align="right">
+
+A coding agent small enough to understand, written in sw-MLPL. The tool is
+named **mlplcode**, in the spirit of OpenCode.
 
 [sw-MLPL](https://github.com/sw-ml-study/sw-mlpl) is a small array/functional
 language for machine-learning study: whole-array arithmetic, records, function
@@ -60,7 +63,7 @@ DONE <summary>
 
 | version | shape                               |
 |---------|-------------------------------------|
-| v0      | READ, THINK                         |
+| v0      | READ, THINK (done)                  |
 | v1      | READ, SEARCH, THINK                 |
 | v2      | READ, SEARCH, EDIT, TEST            |
 | v3      | repeat until tests pass             |
@@ -130,10 +133,30 @@ Read the [architecture](docs/architecture.md), [delivery plan](docs/plan.md),
 agent. The original design discussion is retained in
 [`docs/research.txt`](docs/research.txt).
 
+## Run the v0 agent
+
+```sh
+just v0
+```
+
+v0 is the whole loop with one tool and no iteration: read one file with
+`read_text`, build a `TASK:` / `SOURCE:` prompt, ask the model once, print
+the answer. It lives in [`agents/v0_read_think.mlpl`](agents/v0_read_think.mlpl)
+as five small functions and [`agents/run_v0.mlpl`](agents/run_v0.mlpl) as the
+live entry. The system prompt is the plain file
+[`prompts/think.md`](prompts/think.md). `V0_FILE` and `V0_TASK` override the
+file and the task.
+
+The model is a function reference. `call(:u:ask_live, host, model, system)`
+binds the server details into a one-argument partial; tests bind
+`u:ask_scripted` to a fixed reply or pass `u:ask_echo` to inspect the exact
+prompt. Against `qwen2.5-coder:7b` the fixture crate yields an explanation of
+`add` and a suggested negative-number test.
+
 ## Tests and probes
 
 ```sh
-just tests        # 21 native mlplunit probes, no model server needed
+just tests        # 26 native mlplunit tests, no model server needed
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```
 
@@ -145,10 +168,10 @@ will edit lives in `examples/tiny-rust-project`.
 
 ## Current status
 
-Foundation and measured builtins are complete. No agent runs yet. The
-[capability ledger](docs/sw-mlpl-capabilities.md) now records measured rows
-and five findings for sw-MLPL, including that `+` does not concatenate
-strings and that an undefined function call reports a misleading diagnostic.
-The next step builds the v0 read/think agent.
+Foundation, measured builtins, and the v0 read/think agent are complete. The
+[capability ledger](docs/sw-mlpl-capabilities.md) records measured rows and
+six findings for sw-MLPL, including that `+` does not concatenate strings and
+that an undefined function call reports a misleading diagnostic. The next
+step builds the action protocol parser.
 
 Copyright (c) 2026 Michael A Wright. Distributed under the [MIT License](LICENSE).

@@ -1,0 +1,45 @@
+# Prove the v0 read/think agent with an injected model: prompt text, read failure, end to end.
+include "agents/v0_read_think.mlpl";
+
+@test {name: "v0 prompt is TASK then blank line then SOURCE", tags: ["v0", "prompt"]}
+def u:test_v0_prompt_text() {
+  "Pin the exact prompt layout so live transcripts stay comparable.";
+  u:assert_text_eq(u:v0_build_prompt("fix it", "fn a() {}"), "TASK:\nfix it\n\nSOURCE:\nfn a() {}", "prompt text")
+}
+
+@test {name: "v0 system prompt loads from prompts/think.md", tags: ["v0", "prompt"]}
+def u:test_v0_system_prompt_loads() {
+  "Prove the system prompt is read through the sandbox and is not empty.";
+  system = u:v0_system_prompt();
+  u:assert_ok(system, "system prompt readable")?;
+  u:assert_eq(str_find(unwrap(system), "You are a careful programmer"), 0, "opens with the role line")
+}
+
+@test {name: "v0 read failure propagates as err without asking the model", tags: ["v0", "error"]}
+def u:test_v0_read_failure_is_err() {
+  "Prove a missing file is a Result err carrying the read_text message.";
+  ask = call(:u:ask_scripted, "should not be used");
+  answer = u:v0_think("explain", "examples/tiny-rust-project/src/missing.rs", ask);
+  u:assert_err(answer, "missing file is err")?;
+  u:assert_eq(str_find(err_message(answer), "read_text:"), 0, "message names read_text")
+}
+
+@test {name: "v0 end to end returns the scripted model reply", tags: ["v0", "flow"]}
+def u:test_v0_scripted_flow() {
+  "Prove the flow read -> prompt -> ask -> ok(answer) with a deterministic model.";
+  ask = call(:u:ask_scripted, "The file adds two integers.");
+  answer = u:v0_think("explain", "examples/tiny-rust-project/src/lib.rs", ask);
+  u:assert_ok(answer, "flow succeeds")?;
+  u:assert_text_eq(unwrap(answer), "The file adds two integers.", "scripted reply returned")
+}
+
+@test {name: "v0 sends the task and the real file contents to the model", tags: ["v0", "flow"]}
+def u:test_v0_prompt_reaches_model() {
+  "Use the echo model to inspect the exact prompt and prove the source was included.";
+  answer = u:v0_think("name the missing test", "examples/tiny-rust-project/src/lib.rs", :u:ask_echo);
+  seen = unwrap(answer);
+  u:assert_eq(str_find(seen, "TASK:\nname the missing test\n\nSOURCE:\n"), 0, "task header first")?;
+  u:assert_true(str_find(seen, "pub fn add(left: i64, right: i64) -> i64") > 0, "source body present")
+}
+
+u:run_registered_tests()

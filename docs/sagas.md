@@ -9,10 +9,11 @@ probe the builtins an agent depends on, build the one-tool v0 agent, the
 action protocol parser, and the bounded read/write loop, all proven by
 mlplunit with a scripted fake model.
 
-Progress: foundation (step 001) and measured builtins (step 002) are done.
-Twenty-one mlplunit probes pin the filesystem, `run_script`, and string
-contracts; `just llm-probe` proved a live `llm_call` round trip; five
-sw-MLPL findings are queued in the ledger. Steps 003 to 005 remain.
+Progress: foundation (001), measured builtins (002), and the v0 read/think
+agent (003) are done. Twenty-six mlplunit tests pin the builtin contracts and
+the v0 flow with scripted and echo models; `just v0` ran live against
+qwen2.5-coder:7b; six sw-MLPL findings are queued in the ledger. Steps 004
+and 005 remain.
 
 Acceptance: `just check` passes from a clean checkout; the agent reads and
 edits a file in `examples/tiny-rust-project` under test without Rust; the

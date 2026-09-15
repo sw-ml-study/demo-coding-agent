@@ -1,6 +1,6 @@
 number = 3
 slug = "v0-read-think"
-status = "pending"
+status = "in-progress"
 description = "Implement agents/v0_read_think.mlpl: the smallest coding agent. It reads one ..."
 role = "production"
 context_files = []

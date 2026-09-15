@@ -2,22 +2,8 @@
 set -eu
 
 # Opt-in live probe of llm_call. Never part of `just check`.
-# Defaults follow docs/plan.md "Model defaults"; override in the environment.
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-host=${OLLAMA_HOST:-http://localhost:11434}
-model=${OLLAMA_MODEL:-qwen2.5-coder:7b}
 mlpl=$("$repo_dir/scripts/select-mlpl")
+set -- $("$repo_dir/scripts/check-ollama")
 
-if ! tags=$(curl -sf -m 5 "$host/api/tags" 2>/dev/null); then
-    echo "no Ollama server answered at $host/api/tags" >&2
-    echo "start one with: ollama serve   (or set OLLAMA_HOST)" >&2
-    exit 1
-fi
-
-if ! printf '%s' "$tags" | grep -q "\"name\":\"$model\""; then
-    echo "model $model is not installed at $host" >&2
-    echo "install it with: ollama pull $model   (or set OLLAMA_MODEL)" >&2
-    exit 1
-fi
-
-exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/probes/llm_call_probe.mlpl" -- "$host" "$model"
+exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/probes/llm_call_probe.mlpl" -- "$1" "$2"

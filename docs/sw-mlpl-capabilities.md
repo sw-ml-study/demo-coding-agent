@@ -22,7 +22,7 @@ builtin nor an extension can express it; needs a probe before any request).
 | run an MLPL script as a child         | `run_script(path, opts)`                   | measured   | `tests/test_run_script.mlpl`: `{status, value, value_raw, error, events, events_kind}`; child `err` is `status: "err"`; MLPL only, not a process runner |
 | prefix-parse an action line           | `str_find`, `str_slice`, `str_split`, `str_eq`, `str_len`, `list_len`, `list_get` | measured | `tests/test_string_protocol.mlpl`; no `str_starts_with` or `str_trim` exist, prefix is `str_find(s, verb) == 0` |
 | join observations                     | `str_concat(a, b)`, `str_join(parts, sep)` | measured   | `+` on two strings is an error (see findings); `str_join([], sep)` is `""` |
-| inject a fake model                   | function references, `call`                | supported  | used by mlplunit itself |
+| inject a fake model                   | `:u:` references, `call` partials          | measured   | `tests/test_v0_read_think.mlpl`: a three-argument partial of `u:ask_live` and a one-argument partial of `u:ask_scripted` both invoke with `call(ask, prompt)` |
 | search text across files              | none                                       | extension  | ripgrep crates (`grep-searcher`, `grep-regex`, `ignore`) in `agent-tools`; `rg` subprocess fallback. Pure MLPL `fs_walk`+`read_text`+`str_find` is possible but ignores `.gitignore` and binaries |
 | tagged action values                  | records + `Result`                         | awkward    | `{tool: ..}` records work; no `match` on a tag |
 | run `cargo test` / `git`              | none                                       | extension  | allow-listed argv runner in `agent-tools` |
@@ -73,3 +73,14 @@ Suggested improvement: add `make_dir(path)` (sandboxed, `ok(1)`/`err`).
 Probe: `len(str_split("a b", " "))` is an error; `list_len` is required.
 Expected by an array-language reader: `len` is total over lists. Minor;
 recorded so agents use `list_len`.
+
+### F6. `include` resolves differently under mlpl-repl and mlplunit (tooling)
+
+Probe: `mlpl-repl -f agents/run_v0.mlpl` resolves `include "v0_read_think.mlpl"`
+relative to the including file and refuses `../` that leaves `--source-dir`.
+mlplunit copies each test to a temporary file, so a file-relative
+`include "../agents/x.mlpl"` fails with "no such source file" and the test
+must write `include "agents/x.mlpl"` relative to `source_root`. Both are
+defensible; the asymmetry means an agent file cannot be included the same
+way from a test and from a runner. Suggested improvement: have mlplunit run
+tests in place, or document source-root-relative includes as the contract.

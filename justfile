@@ -36,6 +36,10 @@ tests *args:
 llm-probe:
     ./scripts/run-llm-probe
 
+# Opt-in live v0 agent run: read one file, think once (V0_FILE, V0_TASK override).
+v0:
+    ./scripts/run-v0
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

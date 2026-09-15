@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+# Verify an Ollama server and model are reachable, then print "host" and
+# "model" on two lines. Defaults follow docs/plan.md "Model defaults".
+host=${OLLAMA_HOST:-http://localhost:11434}
+model=${OLLAMA_MODEL:-qwen2.5-coder:7b}
+
+if ! tags=$(curl -sf -m 5 "$host/api/tags" 2>/dev/null); then
+    echo "no Ollama server answered at $host/api/tags" >&2
+    echo "start one with: ollama serve   (or set OLLAMA_HOST)" >&2
+    exit 1
+fi
+
+if ! printf '%s' "$tags" | grep -q "\"name\":\"$model\""; then
+    echo "model $model is not installed at $host" >&2
+    echo "install it with: ollama pull $model   (or set OLLAMA_MODEL)" >&2
+    exit 1
+fi
+
+printf '%s\n%s\n' "$host" "$model"

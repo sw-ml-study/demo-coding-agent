@@ -1,0 +1,33 @@
+# v0 coding agent: read one file, think once, answer. The model is an injected function.
+
+def u:v0_build_prompt(task, source) {
+  "Compose the TASK/SOURCE prompt the model sees; pure so tests can pin the exact text.";
+  str_join(["TASK:", task, "", "SOURCE:", source], "\n")
+}
+
+def u:v0_system_prompt() {
+  "Read the system prompt from prompts/think.md through the sandboxed read; ok(text) or err.";
+  read_text("prompts/think.md")
+}
+
+def u:ask_live(host, model, system, prompt) {
+  "Ask a live Ollama model; bind host, model, and system with call() to get a one-argument ask.";
+  llm_call(host, prompt, model, system)
+}
+
+def u:ask_scripted(reply, prompt) {
+  "Return a fixed reply for any prompt; bind reply with call() to get a deterministic ask.";
+  reply
+}
+
+def u:ask_echo(prompt) {
+  "Return the prompt unchanged so a test can inspect exactly what the model would see.";
+  prompt
+}
+
+def u:v0_think(task, path, ask) {
+  "Read path, build the prompt, and ask the injected model; a read err propagates as a value.";
+  source = read_text(path)?;
+  prompt = u:v0_build_prompt(task, source);
+  ok(call(ask, prompt))
+}
