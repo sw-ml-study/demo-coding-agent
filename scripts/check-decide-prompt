@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+# Gate check: the approval prompt reads one line from piped stdin and
+# approves only y/yes; EOF refuses. Terminals are covered by the FIFO
+# forwarder in scripts/run-loop (stdin builtins refuse a TTY, ledger F9).
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+mlpl=$("$repo_dir/scripts/select-mlpl")
+probe="$repo_dir/probes/decide_prompt_probe.mlpl"
+
+expect() {
+    want=$1; shift
+    got=$("$@" 2>&1 | sed -n 's/^decision: //p')
+    [ "$got" = "$want" ] || { echo "decide_prompt: expected $want, got '$got' for: $*" >&2; exit 1; }
+}
+run() { "$mlpl" --source-dir "$repo_dir" -f "$probe"; }
+expect 1 sh -c "printf 'y\n' | $mlpl --source-dir $repo_dir -f $probe"
+expect 1 sh -c "printf 'yes\n' | $mlpl --source-dir $repo_dir -f $probe"
+expect 1 sh -c "printf '  Y  \n' | $mlpl --source-dir $repo_dir -f $probe"
+expect 0 sh -c "printf 'n\n' | $mlpl --source-dir $repo_dir -f $probe"
+expect 0 sh -c "printf '\n' | $mlpl --source-dir $repo_dir -f $probe"
+expect 0 sh -c "$mlpl --source-dir $repo_dir -f $probe < /dev/null"
+echo "decide_prompt: y/yes approve, n, empty, and EOF refuse"

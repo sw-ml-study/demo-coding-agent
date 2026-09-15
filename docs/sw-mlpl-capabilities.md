@@ -29,6 +29,7 @@ builtin nor an extension can express it; needs a probe before any request).
 | git diff / status                     | none                                       | extension  | `agent-tools` |
 | exact old/new patch                   | `read_text` + `str_find` + `write_atomic`  | supported  | pure MLPL; no extension planned |
 | streaming or native tool calling      | none                                       | non-goal   | text protocol by design |
+| ask the user a question               | `read_stdin_chunk` via a FIFO forwarder    | measured, awkward | stdin builtins refuse a TTY (F9); `scripts/run-loop` forwards terminal lines through a FIFO |
 | OpenAI-compatible chat endpoint       | none; `llm_call` speaks Ollama `/api/generate` only (`contracts/eval-contract/llm-call.md`) | extension or upstream | planned so any hosted model can drive the loop; an HTTP POST from the `agent-tools` extension is the first candidate, an `llm_call` wire-format option the upstream alternative |
 
 ## Upstream status (2026-09-15)
@@ -117,6 +118,20 @@ read fields directly. Justified upstream suggestion, in order of value:
 `else if` chaining (small parser change, removes the nesting), then a
 `match value { "read" => ..., _ => ... }` form over strings and record tags.
 A full tagged-sum type is not needed for this demo.
+
+### F9. Every stdin builtin refuses a terminal (blocking for interactive CLIs)
+
+Probe: `read_stdin()`, `read_stdin_lines()`, and `read_stdin_chunk(n)` all
+return `err("...: stdin is a terminal; pipe input or use args() instead")`
+when stdin is a TTY, measured under a pseudo-terminal
+(`probes/decide_prompt_probe.mlpl` driven by a Python `pty`). They work on
+pipes and report EOF cleanly. Consequence: an MLPL program cannot ask its
+user a question. This repository works around it in `scripts/run-loop` by
+feeding stdin from a FIFO that `cat /dev/tty` fills. Justified upstream
+suggestion: allow `read_stdin_chunk` (or a new `read_line()`) on a TTY,
+reading one line in canonical mode; the refusal makes sense for the
+whole-input `read_stdin()` but not for the bounded chunk form. Affects any
+interactive agent front end.
 
 ### F8. No boolean `&&`/`||` operators and no `str_trim` or list filter (awkward)
 

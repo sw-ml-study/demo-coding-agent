@@ -61,11 +61,18 @@ choose differently.
 
 `ask` resolves through an injected decision function `decide(action)`
 returning 1 or 0. Tests pass `:u:decide_yes` or `:u:decide_no` to prove both
-paths. Live runs default to `decide_no`, so `just loop` is a dry run that
-stops with reason `denied` and prints the refused action; `LOOP_APPROVE=1`
-switches to `decide_yes`. The agent never blocks waiting on a prompt it
-cannot show. A denial ends the run rather than continuing, so the model
-cannot probe the policy by retrying.
+paths. Live runs choose in `scripts/run-loop`: `LOOP_APPROVE=1` gives
+`decide_yes`; a terminal on stdin gives `decide_prompt`, which prints the
+proposed action (for WRITE, the whole body) and approves only `y` or `yes`;
+no terminal gives `decide_no`, so a piped or scripted run never writes.
+
+`decide_prompt` cannot read the terminal itself: every sw-MLPL stdin builtin
+refuses a TTY (ledger F9). The wrapper therefore feeds the agent's stdin
+from a FIFO filled by `cat /dev/tty`, so MLPL reads a pipe while the lines
+still come from the keyboard. `scripts/check-decide-prompt` proves y, yes,
+n, empty, and EOF through pipes in the gate. A denial ends the run rather
+than continuing, so the model cannot probe the policy by retrying, and the
+stop message names the refused action and how to allow it.
 
 ## Per-agent policy
 

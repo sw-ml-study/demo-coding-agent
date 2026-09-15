@@ -160,9 +160,16 @@ prompt. Against `qwen2.5-coder:7b` the fixture crate yields an explanation of
 ## Run the bounded loop
 
 ```sh
-just loop                  # writes are asked and refused: a dry run
-LOOP_APPROVE=1 just loop   # writes are asked and approved
+just loop                  # at a terminal: the agent asks before each write
+LOOP_APPROVE=1 just loop   # every write approved, for unattended runs
+just loop < /dev/null      # no terminal: writes are refused, a dry run
 ```
+
+Before each write the agent prints what it wants to write and waits for
+`y`. Anything else refuses, and a refusal ends the run with a message that
+says which action was refused and how to allow it. Give it your own task
+with `LOOP_TASK="..."`, raise the step limit with `LOOP_BUDGET`, and gate
+DONE on a passing test run with `LOOP_VERIFY=tests`.
 
 [`agents/loop.mlpl`](agents/loop.mlpl) is the whole agent as data plus pure
 functions. One state record `{task, iteration, history, files, budget, done,
@@ -192,7 +199,10 @@ decision, parse-error recovery, and read errors are proven offline.
 replayed from the saved live `qwen2.5-coder:7b` transcript; the parser, the
 file writes, and the test run happen for real. Recorded with
 [VHS](https://github.com/charmbracelet/vhs) from `demos/loop.tape`;
-`just replay` plays it in any terminal without a model server (faster than the GIF, which is slowed to reading pace) and `just
+`just mlpl-demo` runs the same task live, saves the transcript under
+`out/transcripts/`, and restores the example even on Ctrl-C; `SAVE_FIXTURE=1`
+replaces the committed transcript after a successful run. `just replay`
+plays it in any terminal without a model server (faster than the GIF, which is slowed to reading pace) and `just
 demo-tape` re-records it (an MP4 is produced alongside but not committed).
 `demos/loop-live.tape` records a fresh live run instead.*
 

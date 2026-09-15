@@ -1,0 +1,6 @@
+# Probe u:decide_prompt with stdin supplied by the caller: prints decision: 1 or decision: 0.
+include "../agents/loop.mlpl";
+
+decision = u:decide_prompt({tool: "write", path: "notes.txt", body: "hello\n"});
+print("decision:", decision);
+decision

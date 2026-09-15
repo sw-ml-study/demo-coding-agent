@@ -14,3 +14,53 @@ def u:ask_echo(prompt) {
   "Return the prompt unchanged so a test can inspect exactly what the model would see.";
   prompt
 }
+
+def u:describe_action(action) {
+  "Human-readable proposal of an action for an approval prompt.";
+  if str_eq(action.tool, "write") {
+    str_join(["WRITE ", action.path, "\n", action.body, "END"], "")
+  } else {
+    if str_eq(action.tool, "run") {
+      str_concat("RUN ", str_join(action.argv, " "))
+    } else {
+      if str_eq(action.tool, "search") {
+        str_concat("SEARCH ", action.text)
+      } else {
+        str_concat("READ ", action.path)
+      }
+    }
+  }
+}
+
+def u:is_yes(answer) {
+  "1 for y, Y, yes, or YES; everything else refuses.";
+  if str_eq(answer, "y") {
+    1
+  } else {
+    if str_eq(answer, "Y") {
+      1
+    } else {
+      if str_eq(answer, "yes") {
+        1
+      } else {
+        str_eq(answer, "YES")
+      }
+    }
+  }
+}
+
+def u:decide_prompt(action) {
+  "Ask on stdin: print the proposal, read one line, approve only for y or yes; no input refuses.";
+  print("");
+  print("mlplcode wants to:");
+  print(u:describe_action(action));
+  print("approve? [y/N]");
+  chunk = read_stdin_chunk(256);
+  if is_err(chunk) {
+    print("no input available, refusing:", err_message(chunk));
+    0
+  } else {
+    first = unwrap(list_get(str_split(decode_bytes(unwrap(chunk).bytes), "\n"), 0));
+    u:is_yes(u:trim(first))
+  }
+}

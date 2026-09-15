@@ -13,7 +13,11 @@ ask = call(:u:ask_live, host, model, system);
 decide = if str_eq(approve, "1") {
   :u:decide_yes
 } else {
-  :u:decide_no
+  if str_eq(approve, "prompt") {
+    :u:decide_prompt
+  } else {
+    :u:decide_no
+  }
 };
 permissions = {read: "allow", search: "allow", write: "ask", run: "allow"};
 verify = if str_eq(verify_mode, "tests") {
@@ -43,5 +47,11 @@ while state.done == 0 {
 
 print("");
 print("stopped after", state.iteration, "step(s):", state.reason);
-print(state.answer);
+if str_eq(state.reason, "denied") {
+  print("the agent's next action was refused:");
+  print(unwrap(list_get(str_split(str_slice(state.answer, 8, str_len(state.answer)), "\n"), 0)));
+  print("answer y at the prompt, or run with LOOP_APPROVE=1 to approve every write")
+} else {
+  print(state.answer)
+};
 state.reason

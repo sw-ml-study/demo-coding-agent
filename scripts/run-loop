@@ -8,7 +8,30 @@ mlpl=$("$repo_dir/scripts/select-mlpl")
 set -- $("$repo_dir/scripts/check-ollama")
 task=${LOOP_TASK:-Read examples/tiny-rust-project/src/lib.rs and write tests/scratch/NOTES.md with a one-paragraph description of the crate.}
 budget=${LOOP_BUDGET:-8}
-approve=${LOOP_APPROVE:-0}
 verify=${LOOP_VERIFY:-always}
+# Approval: LOOP_APPROVE=1 approves every write; at a terminal the agent
+# asks before each write; without a terminal writes are refused.
+if [ "${LOOP_APPROVE:-0}" = 1 ]; then
+    approve=1
+elif [ -t 0 ]; then
+    approve=prompt
+else
+    approve=0
+fi
 
-exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_loop.mlpl" -- "$1" "$2" "$task" "$budget" "$approve" "$verify"
+if [ "$approve" != prompt ]; then
+    exec "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_loop.mlpl" -- "$1" "$2" "$task" "$budget" "$approve" "$verify"
+fi
+
+# sw-MLPL's stdin builtins refuse a terminal (ledger F9), so feed the agent
+# from a FIFO that a forwarder fills with the lines typed at the terminal.
+fifo=$(mktemp -u)
+mkfifo "$fifo"
+cat /dev/tty > "$fifo" &
+forwarder=$!
+status=0
+"$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_loop.mlpl" -- "$1" "$2" "$task" "$budget" "$approve" "$verify" < "$fifo" || status=$?
+kill "$forwarder" 2>/dev/null || true
+wait "$forwarder" 2>/dev/null || true
+rm -f "$fifo"
+exit "$status"

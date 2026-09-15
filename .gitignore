@@ -28,3 +28,6 @@
 # assets/demo/loop.gif is tracked (re-record deliberately with just demo-tape).
 /assets/demo/*
 !/assets/demo/loop.gif
+
+# Temporary local preview page.
+/animations/

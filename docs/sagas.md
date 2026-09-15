@@ -33,7 +33,11 @@ the README: `demos/loop.tape` replays the saved transcript through the real
 loop (`just replay`, no model server), `demos/loop-live.tape` records a
 fresh live run. Fixed sleeps replaced VHS `Wait`, which matched the typed
 command or saw a stale screen; `just replay-check` in the gate proves the
-recorded run without VHS; live recipes warm the model first.
+recorded run without VHS; live recipes warm the model first. Step 005 made
+`just loop` interactive: at a terminal the agent asks before each write
+through a FIFO forwarder because sw-MLPL's stdin builtins refuse a TTY
+(ledger F9); the demo script now restores the example on Ctrl-C and keeps
+live transcripts out of the committed fixture unless asked.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

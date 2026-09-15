@@ -1,0 +1,8 @@
+number = 5
+slug = "interactive-approval"
+status = "in-progress"
+description = "Make just loop interactive at a terminal. Add u:decide_prompt to the loop ent..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T14:52:32"
+commits = []
