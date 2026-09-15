@@ -18,8 +18,10 @@ vhs validate "$tape"
 vhs "$tape"
 
 gif=$(sed -n 's/^Output \(.*\.gif\)$/\1/p' "$tape" | head -1)
+# Slow the GIF to reading pace: GIF_FRAME_DELAY is hundredths of a second
+# per frame (40 = 2.5 fps, four times slower than the 10 fps capture).
 if command -v gifsicle >/dev/null 2>&1; then
-    gifsicle -O3 --colors 32 --lossy=40 "$gif" -o "$gif"
+    gifsicle --delay "${GIF_FRAME_DELAY:-40}" -O3 --colors 32 --lossy=40 "$gif" -o "$gif"
 else
     echo "gifsicle not found; GIF left unoptimised" >&2
 fi

@@ -192,7 +192,7 @@ decision, parse-error recovery, and read errors are proven offline.
 replayed from the saved live `qwen2.5-coder:7b` transcript; the parser, the
 file writes, and the test run happen for real. Recorded with
 [VHS](https://github.com/charmbracelet/vhs) from `demos/loop.tape`;
-`just replay` plays it in any terminal without a model server and `just
+`just replay` plays it in any terminal without a model server (faster than the GIF, which is slowed to reading pace) and `just
 demo-tape` re-records it (an MP4 is produced alongside but not committed).
 `demos/loop-live.tape` records a fresh live run instead.*
 
