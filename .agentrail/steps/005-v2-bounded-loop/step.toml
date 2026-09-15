@@ -1,0 +1,9 @@
+number = 5
+slug = "v2-bounded-loop"
+status = "pending"
+description = "Implement agents/loop.mlpl: the bounded observe/decide/act/update loop over a..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T10:15:40"
+task_type = "mlpl-agent"
+commits = []

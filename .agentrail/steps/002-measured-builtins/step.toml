@@ -1,0 +1,9 @@
+number = 2
+slug = "measured-builtins"
+status = "pending"
+description = "Add root mlplunit.conf, scripts/run-tests, and a just tests recipe wired into..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T10:15:40"
+task_type = "capability-probe"
+commits = []

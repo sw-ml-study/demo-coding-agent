@@ -1,0 +1,671 @@
+given: 
+https://github.com/orgs/sw-ml-study/repositories(the most recently updated ones especially) how hard would it be to build an opencode-inspired coding agent in mlpl?  ref: 
+anomalyco/opencode-- can you create a short simple agent in mlpl with comments for areas that need to be expanded to make it full-functioned? 
+
+You’re asking whether MLPL can be the orchestration language for a small OpenCode-like coding agent, and for a compact MLPL prototype that makes the missing pieces explicit.
+
+Short answer
+
+Yes — surprisingly feasible now.
+
+The important change is that MLPL already has the hardest conceptual dependency: it can call an LLM directly from MLPL with llm_call(url, prompt, model[, system]), and that call returns an ordinary MLPL string that can flow through the rest of the program.
+
+MLPL also now has UDFs, function references, records, strings/string lists, Result, loops, include, annotations, and native compilation. The project README explicitly describes native hosted-LLM calls as shipped, alongside the interpreter/compiler/runtime infrastructure.
+
+So I would characterize difficulty this way:
+
+Goal	Difficulty
+Toy read/think/respond coding agent	easy
+Agent that reads files and proposes patches	moderate
+Agent that edits files + runs tests	moderate
+Useful autonomous coding loop	moderate–hard
+OpenCode-class product	hard / large project
+
+The gap isn't mainly MLPL syntax. It is the tool runtime around MLPL.
+
+OpenCode's conceptual core is actually fairly small:
+
+user task
+   |
+   v
+context ----+
+            |
+            v
+          LLM
+            |
+      tool request?
+       /        \
+     no          yes
+     |            |
+   answer      execute tool
+                  |
+                  v
+             observation
+                  |
+                  +----> LLM
+
+Everything beyond that—permissions, LSP, subagents, MCP, TUI, context compaction, sessions, provider abstraction—is product engineering layered around this loop. Current OpenCode supports specialized agents, tool permissions, subagents and granular allow/ask/deny policies.
+
+I would build mlpl-agent as a demo first
+
+Not inside sw-mlpl.
+
+Something like:
+
+sw-ml-study/demo-coding-agent
+
+with MLPL owning:
+
+planning
+prompt construction
+agent state
+tool selection
+iteration policy
+result interpretation
+retry policy
+
+and a very thin Rust extension owning mechanisms:
+
+read_file
+write_file
+grep
+glob
+run_process
+git_diff
+maybe apply_patch
+
+That actually fits the design principle already visible in your MLPL work: MLPL owns computation/policy; Rust owns mechanisms.
+
+The crucial architecture would be:
+
+                 MLPL
+        +----------------------+
+        | agent loop           |
+task -->| prompt/context       |
+        | planner              |
+        | tool dispatch policy |
+        | retry/stop logic     |
+        +----------+-----------+
+                   |
+             narrow API
+                   |
+        +----------v-----------+
+        | Rust agent-tools ext |
+        |----------------------|
+        | read                 |
+        | grep                 |
+        | write/apply patch    |
+        | process              |
+        | git diff             |
+        +----------+-----------+
+                   |
+                   v
+                project
+
+                   ^
+                   |
+               llm_call()
+                   |
+              Ollama /
+             llama.cpp
+
+That is much more interesting educationally than cloning OpenCode's implementation.
+
+A deliberately tiny MLPL coding agent
+
+I would initially avoid OpenAI-style native tool calling entirely.
+
+Instead, make the model emit a tiny text protocol:
+
+READ path
+WRITE path
+```text
+...
+
+RUN cargo test
+DONE explanation
+
+
+That makes the agent mechanism visible rather than burying it in JSON schemas.
+
+Here is roughly what I'd want `agent.mlpl` to look like.
+
+:::writing{variant="document" id="48217" title="Minimal MLPL Coding Agent"}
+```text
+# agent.mlpl
+#
+# Tiny OpenCode-inspired coding-agent experiment.
+#
+# The interesting part is intentionally written in MLPL:
+#
+#     observe -> ask model -> choose tool -> execute -> observe
+#
+# Rust should provide only the OS-facing mechanisms marked TODO.
+
+HOST  = "http://localhost:11434"
+MODEL = "qwen2.5-coder"
+
+SYSTEM = "
+You are a small coding agent.
+
+You may respond with exactly ONE action:
+
+READ <path>
+SEARCH <text>
+WRITE <path>
+<complete file contents>
+END
+RUN <command>
+DONE <summary>
+
+Work incrementally.
+Read before writing.
+Run tests after changing code.
+Do not modify files outside the working directory.
+"
+
+
+# ------------------------------------------------------------------
+# TOOL WRAPPERS
+#
+# TODO(agent-tools extension):
+#
+#   agent_read(path)          -> Result<string>
+#   agent_search(pattern)     -> Result<string>
+#   agent_write(path,text)    -> Result<string>
+#   agent_run(command)        -> Result<string>
+#
+# These should be Rust extension functions rather than arbitrary
+# shell access embedded directly into MLPL.
+# ------------------------------------------------------------------
+
+
+def u:read_tool(path) {
+    agent_read(path)
+}
+
+
+def u:search_tool(pattern) {
+    agent_search(pattern)
+}
+
+
+def u:write_tool(path, body) {
+    agent_write(path, body)
+}
+
+
+def u:run_tool(command) {
+    agent_run(command)
+}
+
+
+# ------------------------------------------------------------------
+# MODEL
+# ------------------------------------------------------------------
+
+def u:ask_agent(task, history) {
+    prompt =
+        "TASK:\n" + task +
+        "\n\nWORK SO FAR:\n" + history +
+        "\n\nChoose the next action."
+
+    llm_call(HOST, prompt, MODEL, SYSTEM)
+}
+
+
+# ------------------------------------------------------------------
+# TOOL DISPATCH
+#
+# TODO:
+# Replace these simple prefix tests with a small structured parser.
+# Eventually use records such as:
+#
+#   {tool:"read", path:"src/lib.rs"}
+#
+# or real model tool-call JSON.
+# ------------------------------------------------------------------
+
+def u:execute(action) {
+
+    if str_starts_with(action, "READ ") {
+        path = str_slice(action, 5, str_len(action))
+        u:read_tool(path)
+    }
+
+    else if str_starts_with(action, "SEARCH ") {
+        query = str_slice(action, 7, str_len(action))
+        u:search_tool(query)
+    }
+
+    else if str_starts_with(action, "RUN ") {
+        command = str_slice(action, 4, str_len(action))
+        u:run_tool(command)
+    }
+
+    else {
+        err("unknown agent action: " + action)
+    }
+}
+
+
+# ------------------------------------------------------------------
+# ONE AGENT STEP
+# ------------------------------------------------------------------
+
+def u:step(task, history) {
+
+    action = u:ask_agent(task, history)
+
+    disp("agent> " + action)
+
+    if str_starts_with(action, "DONE ") {
+        {
+            done: 1,
+            history: history,
+            answer: action
+        }
+    }
+
+    else {
+        result = u:execute(action)
+
+        observation =
+            "\n\nACTION:\n" + action +
+            "\n\nOBSERVATION:\n" +
+            to_string(result)
+
+        {
+            done: 0,
+            history: history + observation,
+            answer: ""
+        }
+    }
+}
+
+
+# ------------------------------------------------------------------
+# AGENT LOOP
+#
+# Hard iteration limit is intentional.
+#
+# TODO:
+#   - token/context budget
+#   - context compression
+#   - loop detection
+#   - retry budget
+#   - permission checks
+#   - cancellation
+# ------------------------------------------------------------------
+
+def u:agent(task) {
+
+    history = ""
+    finished = 0
+    answer = ""
+
+    repeat 12 {
+
+        if finished == 0 {
+
+            state = u:step(task, history)
+
+            history = state.history
+            finished = state.done
+            answer = state.answer
+        }
+    }
+
+    answer
+}
+
+
+# ------------------------------------------------------------------
+# EXAMPLE
+# ------------------------------------------------------------------
+
+u:agent(
+    "Read src/lib.rs. Add a unit test for the add function. " +
+    "Make the smallest correct change and run the tests."
+)
+
+:::
+
+That is intentionally not fully runnable against today's MLPL verbatim, because I've made the missing agent-runtime operations visible rather than hiding them in pseudocode pretending they already exist.
+
+An even smaller first proof
+
+Because llm_call() already exists, the first experiment could be almost embarrassingly small:
+
+task = "Explain the most likely bug in src/lib.rs."
+
+source = agent_read("src/lib.rs")
+
+prompt =
+    "TASK:\n" + task +
+    "\n\nSOURCE:\n" + source
+
+answer = llm_call(
+    "http://localhost:11434",
+    prompt,
+    "qwen2.5-coder",
+    "You are a careful Rust programmer."
+)
+
+disp(answer)
+
+Conceptually that is already a coding agent with one tool:
+
+READ -> LLM -> ANSWER
+
+Then evolve it:
+
+v0    READ -> THINK
+
+v1    READ -> SEARCH -> THINK
+
+v2    READ -> SEARCH -> EDIT -> TEST
+
+v3    repeat until tests pass
+
+v4    planning + execution agents
+
+v5    context management + permissions
+
+v6    LSP + git + subagents
+
+v7    MCP / external tools
+
+This progression would make a very good live educational demo.
+
+The most important missing primitives
+
+I'd resist adding a generic shell() builtin to MLPL.
+
+Instead I'd build something like an agent-tools extension.
+
+Phase 1
+agent_read(path)
+agent_write(path, contents)
+agent_search(pattern)
+agent_files(glob)
+agent_run(command)
+Phase 2
+agent_patch(path, old, new)
+agent_git_diff()
+agent_git_status()
+agent_git_show(path)
+Phase 3
+agent_lsp_diagnostics(path)
+agent_lsp_definition(path,line,col)
+agent_lsp_references(...)
+
+OpenCode currently treats filesystem, grep/glob, bash, LSP, web tools, skills and subagents as separately permissionable capabilities.
+
+I think MLPL should copy that idea, but not necessarily its implementation.
+
+The safety boundary matters
+
+This is probably the largest architectural issue.
+
+OpenCode itself explicitly says that it is not sandboxed; its permissions system is primarily an interaction/awareness layer around powerful shell and filesystem capabilities.
+
+For your MLPL experiment I would actually make the model more constrained than OpenCode.
+
+For example:
+
+agent_read       project-root only
+agent_search     project-root only
+agent_write      project-root only
+agent_run        command allow-list
+
+and start with:
+
+allowed:
+
+cargo test *
+cargo check *
+cargo clippy *
+cargo fmt *
+git diff *
+git status *
+
+not:
+
+/bin/sh -c arbitrary-model-generated-string
+
+Then the MLPL policy layer can say:
+
+permission("read")  -> allow
+permission("write") -> ask
+permission("test")  -> allow
+permission("shell") -> deny
+
+Eventually:
+
+permissions = {
+    read: "allow",
+    search: "allow",
+    write: "ask",
+    test: "allow",
+    git: "ask",
+    shell: "deny"
+}
+
+That mirrors one of the better architectural ideas in OpenCode, whose permission outcomes are allow, ask, or deny.
+
+Where MLPL is particularly interesting
+
+A conventional agent implementation tends to accumulate OO infrastructure:
+
+Agent
+Session
+Conversation
+Provider
+Tool
+ToolCall
+ToolResult
+Permission
+ContextManager
+Plugin
+
+MLPL could make much of that data plus transformations.
+
+For instance, an agent state could eventually just be:
+
+state = {
+    task: task,
+    iteration: 4,
+    files: ["src/lib.rs", "src/foo.rs"],
+    observations: [...],
+    tests_passed: 0,
+    token_budget: 12000
+}
+
+and the core becomes nearly functional:
+
+state
+  |> build_context
+  |> ask_model
+  |> parse_action
+  |> authorize
+  |> execute
+  |> update_state
+
+That fits the functional-pipeline work you've already been doing in MLPL unusually well.
+
+In fact, an agent is a functional pipeline with feedback:
+
+                 +----------------+
+                 |                |
+                 v                |
+Task -> Observe -> Decide -> Act -> State
+           ^                      |
+           +----------------------+
+
+That's a much better MLPL demonstration than implementing another matrix operation.
+
+OpenCode features I would deliberately postpone
+
+A full OpenCode analogue currently encompasses specialized primary agents/subagents, independently configurable model/prompts/tool access, granular permissions, LSP integration, context compaction, external-directory policy, web capabilities and more.
+
+I would not start with:
+
+TUI
+MCP
+multiple providers
+streaming
+multi-agent concurrency
+LSP
+GitHub integration
+session persistence
+embeddings/RAG
+automatic context compaction
+arbitrary shell access
+
+Those obscure the experiment.
+
+Instead make the central README proposition:
+
+How little machinery is required to turn an array/functional language into a coding agent?
+
+And demonstrate that the answer is approximately:
+
+1 LLM primitive
++
+5 OS tools
++
+~100 lines MLPL
+
+That's a compelling experiment.
+
+A slightly more ambitious architecture
+
+After the toy agent works, I'd split planner and implementer:
+
+                    task
+                     |
+                     v
+               +-----------+
+               | planner   |
+               | read-only |
+               +-----+-----+
+                     |
+                    plan
+                     |
+                     v
+               +-----------+
+               | builder   |
+               | read/edit |
+               +-----+-----+
+                     |
+                  changes
+                     |
+                     v
+               +-----------+
+               | validator |
+               | test-only |
+               +-----+-----+
+                     |
+                 pass/fail
+                     |
+             +-------+-------+
+             |               |
+           DONE          builder
+
+These don't even have to be separate models.
+
+They're merely:
+
+u:planner(task, context)
+u:builder(task, plan, context)
+u:reviewer(task, diff, tests)
+
+with different system prompts and permission sets.
+
+That directly mirrors OpenCode's useful distinction between full development agents and restricted planning/review agents, without cloning its framework.
+
+One thing MLPL itself would benefit from
+
+The experiment will probably expose a useful language feature:
+
+structured sum / tagged values
+
+Instead of model actions being encoded as strings:
+
+"READ src/lib.rs"
+
+you really want:
+
+{
+    tool: "read",
+    args: {
+        path: "src/lib.rs"
+    }
+}
+
+And eventually:
+
+match action.tool {
+    "read"   => ...
+    "write"  => ...
+    "run"    => ...
+}
+
+Your current records + Result get you much of the way there.
+
+So the coding-agent demo could serve as a stress test for records, string processing, Result handling, dispatch and extension APIs, just as the ML demos stress tensor semantics.
+
+My proposed repository
+
+I'd call it:
+
+demo-coding-agent
+
+rather than mlpl-opencode or similar.
+
+Initial structure:
+
+demo-coding-agent/
+├── README.md
+├── agents/
+│   ├── simple.mlpl
+│   ├── planner-builder.mlpl
+│   └── reviewer.mlpl
+├── examples/
+│   └── tiny-rust-project/
+├── prompts/
+│   ├── build.md
+│   ├── plan.md
+│   └── review.md
+├── extension/
+│   └── agent-tools/        # Rust
+└── docs/
+    ├── architecture.md
+    ├── permissions.md
+    └── progression.md
+
+The README shouldn't say “we built another OpenCode.”
+
+It should say something closer to:
+
+A coding agent small enough to understand.
+
+The control loop is MLPL. Rust supplies only filesystem and process mechanisms. A local LLM supplies inference.
+
+That is consistent with the educational direction of your other repositories.
+
+Bottom line
+
+I think this is very worth doing now, because the recent llm_call() work removes what would previously have been the biggest blocker. MLPL already has a real language-level LLM primitive; the shipped demo demonstrates that the returned model response is simply another MLPL string that can be composed into a program.
+
+I would not try to implement OpenCode in MLPL.
+
+I would build a ~100–200 line understandable coding agent in MLPL, backed by perhaps 5 narrowly scoped Rust extension functions, and use OpenCode as the architectural comparison point.
+
+That could become one of the strongest MLPL demos because it answers a much more interesting question than “can MLPL call an LLM?”:
+
+Can MLPL itself express the control plane of an autonomous software agent?
+
+Based on the current language, the answer looks like yes.
+

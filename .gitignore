@@ -1,0 +1,23 @@
+# Rust build output for the optional agent-tools extension.
+/target/
+**/target/
+
+# Locally built native extension artifacts.
+*.dylib
+*.so
+*.dll
+
+# Generated agent transcripts, scratch workspaces, and local tool output.
+/out/
+/tmp/
+*.tmp
+
+# Local environment and tool overrides.
+.env
+.env.*
+!.env.example
+
+# Platform/editor metadata.
+.DS_Store
+*.swp
+*~
