@@ -1,0 +1,1 @@
+Loop guards: read-before-write refusal with guidance and repeated-action detection (flag once, stuck on the third identical reply), state carries last_reply/repeats, four new tests (77 total), prompt de-anchored to placeholders. Live mlpl-demo then finished in seven steps with both tests passing and a verified DONE.

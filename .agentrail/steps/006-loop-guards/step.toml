@@ -1,8 +1,9 @@
 number = 6
 slug = "loop-guards"
-status = "in-progress"
+status = "completed"
 description = "Add two loop guards as pure functions over state, tests first, after a live j..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T14:58:29"
-commits = []
+completed_at = "2026-09-15T15:09:24"
+commits = ["26f03bbd92cc1da984ad06851e58c3b481a62330"]
