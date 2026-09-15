@@ -13,10 +13,12 @@ reader can diff the loop as it gains capability.
 | v5      | budgets, compaction, loop detection       | pure policy functions       | 4    |
 | v6      | git diff and status, exact patch          | extension                   | 2, 4 |
 
-Deliberately postponed, in OpenCode's terms: TUI, MCP, multiple providers,
-streaming, subagent concurrency, LSP, GitHub integration, session persistence,
-embeddings or RAG, automatic context compaction, arbitrary shell access. Each
-would obscure the experiment more than it would teach.
+Deliberately postponed, in OpenCode's terms: TUI, MCP, streaming, subagent
+concurrency, LSP, GitHub integration, session persistence, embeddings or RAG,
+automatic context compaction, arbitrary shell access. Each would obscure the
+experiment more than it would teach. One provider addition is planned: an
+OpenAI-compatible chat endpoint so any hosted model can drive the same loop
+through the existing model-injection seam.
 
 ## The smallest possible first proof
 

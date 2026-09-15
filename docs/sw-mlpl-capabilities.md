@@ -28,6 +28,7 @@ builtin nor an extension can express it; needs a probe before any request).
 | git diff / status                     | none                                       | extension  | `agent-tools` |
 | exact old/new patch                   | `read_text` + `str_find` + `write_atomic`  | supported  | pure MLPL; no extension planned |
 | streaming or native tool calling      | none                                       | non-goal   | text protocol by design |
+| OpenAI-compatible chat endpoint       | none; `llm_call` speaks Ollama `/api/generate` only (`contracts/eval-contract/llm-call.md`) | extension or upstream | planned so any hosted model can drive the loop; an HTTP POST from the `agent-tools` extension is the first candidate, an `llm_call` wire-format option the upstream alternative |
 
 ## Findings queue
 

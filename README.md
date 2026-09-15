@@ -68,12 +68,32 @@ See [progression](docs/progression.md) for what is deliberately postponed.
 - `mlplunit` on `PATH`, an absolute `MLPLUNIT` override, or the adjacent
   `../../softwarewrighter/mlplunit` checkout.
 - [`just`](https://github.com/casey/just) for repository task aliases.
-- For live runs only: an Ollama or llama.cpp server and a coding model such
-  as `qwen2.5-coder`, selected by explicit environment variables.
+- For live runs only: an Ollama server with `qwen2.5-coder:7b` pulled. See
+  the model section below.
 - Rust 1.85 or newer and `sw-checklist`, only once `extensions/agent-tools`
   exists.
 
 The scripts select existing tools; they never install or overwrite them.
+
+## Model
+
+Live recipes default to `OLLAMA_HOST=http://localhost:11434` and
+`OLLAMA_MODEL=qwen2.5-coder:7b`; override either in the environment.
+
+```sh
+ollama pull qwen2.5-coder:7b
+```
+
+The 7B coder model is the floor: it fits an RTX 3060 12 GB or a 16 GB
+unified-memory Mac with room for context, and it keeps to the one-action
+protocol. On smaller machines `qwen2.5-coder:1.5b` runs anywhere but drifts
+out of the protocol more often. Bigger cards can point the same variable at
+a 14B or 32B model. `just check` never contacts a model server, so a fork
+without a GPU still gets a green gate.
+
+An OpenAI-compatible chat endpoint is planned so any hosted model can drive
+the same loop through the model-injection seam; see
+[progression](docs/progression.md).
 
 ## Development process
 

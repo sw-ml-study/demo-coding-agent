@@ -44,6 +44,29 @@ OpenCode is the architectural comparison point, not the implementation target.
   against a scripted fake model injected as a function reference. Live Ollama
   runs are opt-in demos, never the only acceptance evidence.
 
+## Model defaults
+
+Live runs default to `OLLAMA_HOST=http://localhost:11434` and
+`OLLAMA_MODEL=qwen2.5-coder:7b`, both overridable by environment variable.
+That model is the floor because it fits an RTX 3060 12 GB or a 16 GB
+unified-memory Mac with room for an 8K context, and it follows a strict
+one-action system prompt reliably. `qwen2.5-coder:1.5b` is the documented
+"runs anywhere, expect protocol drift" fallback; larger variants are opt-in
+through the same variable. The live-run script checks the server's tags
+endpoint first and prints the exact `ollama pull` command when the model is
+absent, rather than failing inside `llm_call`. `just check` never contacts a
+model server, so forks without a GPU still get a green gate. Recorded
+transcript fixtures name the model that produced them.
+
+This section supersedes the "runs live only when `OLLAMA_HOST` and
+`OLLAMA_MODEL` are set" wording in the step 003 prompt: the variables are
+optional with those defaults.
+
+Later, an OpenAI-compatible chat endpoint (`OPENAI_BASE_URL`,
+`OPENAI_API_KEY`, `OPENAI_MODEL`) lets any hosted model drive the same loop.
+Whether `llm_call` already speaks that wire format, or the request must go
+through the extension, is measured in step 002 and recorded in the ledger.
+
 ## Architecture rule
 
 ```text
@@ -87,7 +110,7 @@ no MLPL program ever hands the model a raw shell.
    file from `examples/tiny-rust-project`, builds a prompt, asks the model, and
    prints the answer. The model call is injected so mlplunit proves the prompt
    and the flow with a scripted fake; a `just v0` recipe runs it live against
-   Ollama when a server is present.
+   Ollama using the model defaults above.
 4. Implement the action protocol parser: `READ`, `SEARCH`, `WRITE ... END`,
    `RUN`, and `DONE` lines become records such as `{tool: "read", path: ...}`
    or `err(...)`. Malformed, multi-action, and out-of-sandbox inputs are tested
@@ -176,8 +199,9 @@ Exit: another MLPL repository can reuse the agent core without copying it.
 
 ## Non-goals
 
-- A TUI, MCP, multiple providers, streaming, session persistence, embeddings
-  or RAG, LSP, GitHub integration, or multi-agent concurrency.
+- A TUI, MCP, streaming, session persistence, embeddings or RAG, LSP, GitHub
+  integration, or multi-agent concurrency. Multiple providers are postponed,
+  not excluded: an OpenAI-compatible endpoint is the one planned addition.
 - A generic `shell()` builtin or arbitrary command execution.
 - Automatic context compaction before a measured budget problem exists.
 - Reproducing OpenCode's implementation or its plugin surface.

@@ -100,9 +100,12 @@ awkward, not blocking.
 `llm_call` needs a running server, so no test calls it directly. Agents take
 the model as a function reference (`:u:ask_live` or `:u:ask_scripted`). The
 scripted model replays a fixed transcript of replies, which makes every loop
-test deterministic and offline. Live runs are `just` recipes that select the
-Ollama host and model from explicit environment variables, never implicit
-lookups.
+test deterministic and offline. Live runs are `just` recipes that read
+`OLLAMA_HOST` and `OLLAMA_MODEL`, defaulting to `http://localhost:11434` and
+`qwen2.5-coder:7b`, and pass them to `llm_call` explicitly; there are no
+implicit lookups inside the agent. A later provider function for an
+OpenAI-compatible chat endpoint will plug into the same injection point, so
+the loop never knows which server answered.
 
 ## Safety boundary
 
