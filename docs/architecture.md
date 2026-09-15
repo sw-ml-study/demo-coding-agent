@@ -119,7 +119,7 @@ live transcripts and now tolerated, each pinned by a test: a fence-only line
 (three backticks, optionally with a language word) directly after
 `WRITE <path>` and directly before `END` is dropped; fences inside the body
 are content; blank lines before an opening fence and a fence-only line after
-`END` are also dropped; everything from a fabricated `OBSERVATION:` line
+`END` are also dropped; a leading `ACTION:` header line is dropped; everything from a fabricated `OBSERVATION:` line
 onward is ignored once the action is complete. Habits seen and deliberately
 not tolerated: a body without `END`, `DONE` on the line after a body, `END`
 sent as its own turn, and `READ <path> END`; the system prompt in

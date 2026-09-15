@@ -106,7 +106,8 @@ prints how long that took, allowing up to five minutes for a cold start, so
 the first real `llm_call` never pays it; each call is then bounded by
 `llm_call`'s own 120-second timeout. On smaller machines `qwen2.5-coder:1.5b` runs anywhere but drifts
 out of the protocol more often. Bigger cards can point the same variable at
-a 14B or 32B model. `just check` never contacts a model server, so a fork
+a larger model; `devstral:24b` (14 GB) completed the demo task with no
+syntax slips and is the recommended upgrade tier. `just check` never contacts a model server, so a fork
 without a GPU still gets a green gate.
 
 An OpenAI-compatible chat endpoint is planned so any hosted model can drive

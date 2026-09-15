@@ -51,6 +51,22 @@ only with placeholder examples, a forbidden-continuation rule, and a loop
 that refuses unverified success. Fabricated observations are the dominant
 failure and the verifier is what makes the demo honest.
 
+## Model comparison on the same task
+
+`just mlpl-demo`, same prompt, same guards, one run each, 2026-09-15:
+
+| model | size | steps | outcome | wasted or repaired steps | wall |
+|-------|------|-------|---------|--------------------------|------|
+| qwen2.5-coder:7b | 4.7 GB | 7 | verified done, both tests pass | one SEARCH placeholder | ~90 s |
+| devstral:24b, before the header tolerance | 14 GB | 9 | verified done, both tests pass | two parse errors from a copied `ACTION:` header, one RUN before the test was written, then a correct write and rerun | 68 s |
+| devstral:24b, after | 14 GB | 6 | verified done, both tests pass | none | 32 s |
+
+Devstral read before writing without being told twice, reran the tests
+after its second write, and made no syntax slips in the MLPL it wrote. Its
+only habit was echoing the transcript's `ACTION:` header; once the parser
+dropped it, the run was the minimum six steps with no wasted step. It is
+the upgrade tier: it needs about 14 GB, so it does not fit the 12 GB floor.
+
 ## Demo recording
 
 `demos/loop.tape` records `just replay`: `agents/replay_loop.mlpl` extracts

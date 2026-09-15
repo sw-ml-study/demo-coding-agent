@@ -146,6 +146,23 @@ def u:split_words(text) {
   str_split(joined, " ")
 }
 
+def u:first_content_line_after(lines, from) {
+  "Index of the first non-blank line at or after from, or -1.";
+  n = list_len(lines);
+  i = from;
+  found = -1;
+  while i < n {
+    if str_len(u:trim(unwrap(list_get(lines, i)))) > 0 {
+      found = i;
+      break
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+
 def u:first_content_line(lines) {
   "Index of the first non-blank line, or -1.";
   n = list_len(lines);
@@ -293,6 +310,13 @@ def u:parse_action(text) {
   "Parse exactly one protocol action from a model reply: ok(record) or err(reason).";
   lines = str_split(u:normalize_newlines(text), "\n");
   start = u:first_content_line(lines);
+  start = if start >= 0 {
+    if str_eq(u:trim(unwrap(list_get(lines, start))), "ACTION:") { u:first_content_line_after(lines, start + 1) } else {
+      start
+    }
+  } else {
+    start
+  };
   if start < 0 {
     err("empty reply")
   } else {

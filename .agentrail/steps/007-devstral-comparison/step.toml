@@ -1,0 +1,8 @@
+number = 7
+slug = "devstral-comparison"
+status = "in-progress"
+description = "Compare devstral:24b against the qwen2.5-coder:7b baseline on just mlpl-demo ..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T15:58:08"
+commits = []

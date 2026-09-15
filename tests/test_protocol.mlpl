@@ -125,6 +125,16 @@ def u:test_parse_write_fence_after_end() {
   u:assert_text_eq(c.body, "\nfirst line blank kept\n", "a leading blank line without a fence is content")
 }
 
+@test {name: "a leading ACTION: header line is ignored", tags: ["protocol", "habit"]}
+def u:test_parse_leading_action_header() {
+  "devstral copies the transcript's ACTION: header before its action; the header is dropped.";
+  a = unwrap(u:parse_action("ACTION:\nREAD src/lib.mlpl"));
+  u:assert_text_eq(a.path, "src/lib.mlpl", "read after header")?;
+  b = unwrap(u:parse_action("ACTION:\n\nWRITE a.txt\nbody\nEND"));
+  u:assert_text_eq(b.body, "body\n", "write after header and blank")?;
+  u:assert_err(u:parse_action("ACTION:"), "header alone is empty")
+}
+
 @test {name: "empty reply is rejected", tags: ["protocol", "reject"]}
 def u:test_reject_empty() {
   "An empty or whitespace-only reply is err naming empty reply.";
