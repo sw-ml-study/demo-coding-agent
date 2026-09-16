@@ -1,8 +1,9 @@
 number = 2
 slug = "blog-post-draft"
-status = "in-progress"
+status = "completed"
 description = "Draft docs/blog-post.md: a publishable post about building mlplcode, a coding..."
 role = "production"
 context_files = []
 created_at = "2026-09-16T08:31:58"
-commits = []
+completed_at = "2026-09-16T08:33:06"
+commits = ["37fb32e432de676bca92bee22ebb01369b7ccca7"]

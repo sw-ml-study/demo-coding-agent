@@ -1,0 +1,1 @@
+docs/blog-post.md drafted from the recorded evidence: loop, protocol, injected model, per-model live results, guards born from failures, kept hello-world example, sw-MLPL findings and fixes, non-goals, next. Under 1,300 words, marked draft.
