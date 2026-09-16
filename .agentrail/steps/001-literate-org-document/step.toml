@@ -1,9 +1,10 @@
 number = 1
 slug = "literate-org-document"
-status = "in-progress"
+status = "completed"
 description = "Write docs/mlplcode.org, a literate-programming explanation of every MLPL fil..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T20:09:53"
+completed_at = "2026-09-16T08:31:58"
 task_type = "documentation"
-commits = []
+commits = ["eb11a7609abb76eac9bb8a4a448f4f0fe51522dd"]

@@ -1,0 +1,1 @@
+docs/mlplcode.org: literate explanation of every MLPL file with a primer, tangle targets for all 11 sources, awk plus org-babel-tangle drift check in the gate, no evaluation on export, three runnable primer blocks, publish-doc to html/txt/md/pdf (plain and evaluated), scratch under work/. Reviewed exports produced by the user.
