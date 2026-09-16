@@ -10,12 +10,12 @@ This repository reuses, but does not modify, the extension authoring path:
 manifest, the private `_namespace` plus public `module.mlpl` facade pattern,
 and stock-CLI `load_extension`.
 
-Open decision for Saga 2: the SDK crates are unpublished (`version = 0.0.0`),
-so `extensions/agent-tools/Cargo.toml` must either use a path dependency on
-the adjacent checkout, pinned by documented revision, or a git dependency on
-the demo-extensions repository at a pinned commit. The git dependency is the
-cleaner external-crate story and is the default unless build time or offline
-policy argues otherwise. Record the chosen pin in `docs/architecture.md`.
+Decision taken in Saga 2: `extensions/agent-tools/Cargo.toml` depends on
+`mlpl-extension-sdk` (and, for tests, `mlpl-extension-loader`) as git
+dependencies on `https://github.com/sw-ml-study/demo-extensions` at
+revision `2b2ae48e483284ddc83956f464a7481d170367b8`. Move the pin
+deliberately: bump both `rev` values together and re-run
+`just agent-tools`. The adjacent checkout is never referenced by path.
 
 No request is open.
 

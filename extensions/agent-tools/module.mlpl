@@ -1,0 +1,11 @@
+# Public MLPL facade over the private _agent_tools native namespace: search and allow-listed run.
+
+def u:agent_tools_search(root, pattern) {
+  "Search files under root for a regex; {matches, count, truncated} with path:line:text lines.";
+  _agent_tools:search(root, pattern)
+}
+
+def u:agent_tools_run(root, command) {
+  "Run one allow-listed command inside root; {status, stdout, stderr, timed_out}.";
+  _agent_tools:run(root, command)
+}

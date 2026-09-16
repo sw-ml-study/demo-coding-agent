@@ -60,6 +60,10 @@ demo-tape:
 replay-check:
     ./scripts/check-replay
 
+# Build and prove the Rust agent-tools extension (cargo tests, clippy, sw-checklist, dynamic load).
+agent-tools:
+    ./scripts/check-agent-tools
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

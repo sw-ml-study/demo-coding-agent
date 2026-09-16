@@ -40,7 +40,13 @@ through a FIFO forwarder because sw-MLPL's stdin builtins refuse a TTY
 live transcripts out of the committed fixture unless asked. Step 006 added
 the read-before-write and repeated-action guards after a live run edited
 blind and looped on an identical failing write; the next live run finished
-in seven steps.
+in seven steps. Step 007 compared devstral:24b (six steps after tolerating
+its copied `ACTION:` header). Step 008 added the Rust `agent-tools`
+extension: `_agent_tools:search` on the ripgrep crates honouring
+`.gitignore`, `_agent_tools:run` for `cargo test/check/clippy/fmt` and
+`git diff/status` only, with a 120 s timeout and bounded output, pinned to
+demo-extensions `2b2ae48` by git dependency, proven by cargo tests, clippy,
+`sw-checklist`, and a stock-CLI `load_extension` probe.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

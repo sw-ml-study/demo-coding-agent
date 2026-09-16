@@ -1,0 +1,22 @@
+[extension]
+name = "agent_tools"
+version = "0.1.0"
+abi = 1
+module = "module.mlpl"
+native_namespace = "_agent_tools"
+
+[[native]]
+target = "aarch64-apple-darwin"
+library = "native/aarch64-apple-darwin/libmlpl_extension_agent_tools.dylib"
+
+[[native]]
+target = "x86_64-apple-darwin"
+library = "native/x86_64-apple-darwin/libmlpl_extension_agent_tools.dylib"
+
+[[native]]
+target = "aarch64-unknown-linux-gnu"
+library = "native/aarch64-unknown-linux-gnu/libmlpl_extension_agent_tools.so"
+
+[[native]]
+target = "x86_64-unknown-linux-gnu"
+library = "native/x86_64-unknown-linux-gnu/libmlpl_extension_agent_tools.so"

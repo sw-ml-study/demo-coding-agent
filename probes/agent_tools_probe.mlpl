@@ -1,0 +1,17 @@
+# Stock-CLI proof that the agent-tools extension loads dynamically and answers search and run.
+include "../extensions/agent-tools/module.mlpl";
+
+library = unwrap(list_get(args(), 0));
+root = unwrap(list_get(args(), 1));
+load_extension(library);
+
+found = u:agent_tools_search(root, "def u:add");
+print("search count:", found.count);
+print("search truncated:", found.truncated);
+print(found.matches);
+
+status = u:agent_tools_run(root, "git status --short examples/tiny-mlpl-project");
+print("run status:", status.status, "timed_out:", status.timed_out);
+refused = u:agent_tools_run(root, "sh -c ls");
+print("refused:", refused);
+{count: found.count, run_status: status.status}

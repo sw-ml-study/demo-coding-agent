@@ -158,7 +158,7 @@ agents/                  MLPL agents: v0 read/think, loop, planner/builder/revie
 prompts/                 system prompts as plain text files
 examples/tiny-mlpl-project/  the first project the agent edits: lib.mlpl, tests/, vendored mlplunit
 examples/tiny-rust-project/  the Rust project for the extension path
-extensions/agent-tools/  Rust cdylib + extension.toml + module.mlpl (Saga 2)
+extensions/agent-tools/  Rust cdylib on the demo-extensions SDK (git, rev 2b2ae48): ripgrep search, allow-listed run
 tests/                   native mlplunit suites with scripted fake models
 fixtures/                recorded transcripts and expected observations
 scripts/                 thin portable checks; justfile is the entry point

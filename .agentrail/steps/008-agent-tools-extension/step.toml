@@ -1,6 +1,6 @@
-number = 7
+number = 8
 slug = "agent-tools-extension"
-status = "pending"
+status = "in-progress"
 description = "Add extensions/agent-tools as a Rust cdylib on the demo-extensions ABI and SD..."
 role = "production"
 context_files = []

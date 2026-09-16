@@ -85,8 +85,10 @@ file in Emacs using sw-MLPL's existing org-babel backend.
 - [`just`](https://github.com/casey/just) for repository task aliases.
 - For live runs only: an Ollama server with `qwen2.5-coder:7b` pulled. See
   the model section below.
-- Rust 1.85 or newer and `sw-checklist`, only once `extensions/agent-tools`
-  exists.
+- Rust 1.85 or newer for `extensions/agent-tools`, the ripgrep-backed
+  search and allow-listed `cargo`/`git` runner; `just check` skips the Rust
+  checks with a notice when `cargo` is absent. `sw-checklist` gates the crate
+  when installed.
 
 The scripts select existing tools; they never install or overwrite them.
 

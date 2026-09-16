@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+
+# Gate check for the Rust agent-tools extension: cargo tests, clippy with
+# the workspace's pedantic lints, sw-checklist, and a stock-CLI dynamic load
+# through load_extension. Skips with a notice when cargo is not installed so
+# MLPL-only environments keep a green gate.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "agent-tools: cargo not installed, skipping the Rust extension checks"
+    exit 0
+fi
+mlpl=$("$repo_dir/scripts/select-mlpl")
+cd "$repo_dir"
+
+cargo build -q -p mlpl-extension-agent-tools
+cargo test -q -p mlpl-extension-agent-tools
+cargo clippy -q -p mlpl-extension-agent-tools --all-targets
+if command -v sw-checklist >/dev/null 2>&1; then
+    sw-checklist extensions/agent-tools
+else
+    echo "agent-tools: sw-checklist not installed, skipped" >&2
+fi
+
+suffix=so
+[ "$(uname -s)" = Darwin ] && suffix=dylib
+library=$repo_dir/target/debug/libmlpl_extension_agent_tools.$suffix
+output=$("$mlpl" --source-dir "$repo_dir" -f "$repo_dir/probes/agent_tools_probe.mlpl" -- "$library" "$repo_dir")
+printf '%s\n' "$output" | grep -q "examples/tiny-mlpl-project/lib.mlpl:3:def u:add(a, b) {" || {
+    printf '%s\n' "$output" >&2; echo "agent-tools: search did not find u:add in the example" >&2; exit 1; }
+printf '%s\n' "$output" | grep -q "run status: 0 timed_out: 0" || {
+    printf '%s\n' "$output" >&2; echo "agent-tools: git status did not run" >&2; exit 1; }
+printf '%s\n' "$output" | grep -q "command not allowed: sh -c ls" || {
+    printf '%s\n' "$output" >&2; echo "agent-tools: sh -c was not refused" >&2; exit 1; }
+echo "agent-tools: cargo tests, clippy, sw-checklist, dynamic load, search, run, refusal"

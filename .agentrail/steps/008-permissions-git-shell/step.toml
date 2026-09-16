@@ -1,9 +1,0 @@
-number = 8
-slug = "permissions-git-shell"
-status = "pending"
-description = "Extend the permission record with git and shell fields ({read, search, write,..."
-role = "production"
-context_files = []
-created_at = "2026-09-15T11:58:25"
-task_type = "mlpl-agent"
-commits = []

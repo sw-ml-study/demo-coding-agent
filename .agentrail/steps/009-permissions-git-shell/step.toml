@@ -1,7 +1,7 @@
 number = 9
-slug = "rust-close-the-loop"
+slug = "permissions-git-shell"
 status = "pending"
-description = "Close the loop on the Rust target: the agent adds a unit test for add to exam..."
+description = "Extend the permission record with git and shell fields ({read, search, write,..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T11:58:25"
