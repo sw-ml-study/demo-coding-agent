@@ -71,11 +71,15 @@ tests pass, recorded as a VHS demo. Then add the Rust `agent-tools`
 extension for ripgrep search, allow-listed `cargo`/`git`, and exact patching
 to reach the same result on the Rust example.
 
-## Next: the literate document, then planner, builder, reviewer
+## Active: the literate document, then planner, builder, reviewer
 
-First `docs/mlplcode.org`: a literate org-mode explanation of every MLPL
-file of the agent with executable org-babel blocks and a tangle check.
-Then planner, builder, and reviewer agents sharing one model with different
-prompts and permission sets. Iteration policy: budgets, compaction, loop
+Step 001 wrote `docs/mlplcode.org`: a primer on the MLPL the agent uses,
+the shape of the loop, then every prompt and every function of the nine
+agent files in dependency order, each in an org-babel block with a tangle
+target and prose explaining the decision it embodies. `scripts/check-tangle`
+reproduces all eleven sources from the document with an awk tangle and,
+when Emacs is present, with org-babel-tangle, and diffs them against the
+committed files under `just check`. Next: planner, builder, and reviewer
+agents sharing one model with different prompts and permission sets. Iteration policy: budgets, compaction, loop
 detection, retry, cancellation. Finally the OpenCode comparison write-up and
 a `demo-mlpl-libraries` handoff for the domain-neutral agent core.

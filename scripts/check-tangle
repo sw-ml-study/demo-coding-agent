@@ -1,0 +1,72 @@
+#!/bin/sh
+set -eu
+
+# Gate check: docs/mlplcode.org must reproduce every source it explains.
+# Tangle rule (the same one org-babel-tangle applies): for each
+# `#+begin_src <lang> :tangle <path>` block, in document order, the block
+# body is appended to <path> (relative to docs/) with one blank line between
+# blocks. Implemented in awk so the check needs no Emacs; when Emacs is
+# available the same tangle is also run through org-babel-tangle and must
+# agree.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+org=$repo_dir/docs/mlplcode.org
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+awk -v out="$work" '
+/^#\+begin_src / {
+    target = ""
+    for (i = 2; i <= NF; i++) if ($i == ":tangle") target = $(i + 1)
+    if (target != "" && target != "no") {
+        sub(/^\.\.\//, "", target)
+        file = out "/" target
+        dir = file; sub(/\/[^\/]*$/, "", dir)
+        system("mkdir -p \"" dir "\"")
+        if (file in seen) printf "\n" >> file
+        seen[file] = 1
+        inblock = 1
+        next
+    }
+}
+/^#\+end_src/ { inblock = 0; next }
+inblock { print >> file }
+' "$org"
+
+status=0
+count=0
+for tangled in $(cd "$work" && find . -type f | sort); do
+    rel=${tangled#./}
+    count=$((count + 1))
+    if ! cmp -s "$work/$rel" "$repo_dir/$rel"; then
+        echo "tangle drift: docs/mlplcode.org does not reproduce $rel" >&2
+        diff "$repo_dir/$rel" "$work/$rel" | head -20 >&2
+        status=1
+    fi
+done
+[ "$count" -gt 0 ] || { echo "no tangle targets found in docs/mlplcode.org" >&2; exit 1; }
+
+emacs=${EMACS:-}
+[ -n "$emacs" ] || command -v emacs >/dev/null 2>&1 && emacs=${emacs:-emacs} || true
+[ -n "$emacs" ] || [ ! -x /Applications/Emacs.app/Contents/MacOS/Emacs ] || emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
+if [ -n "$emacs" ]; then
+    ework=$(mktemp -d)
+    mkdir -p "$ework/docs"
+    cp "$org" "$ework/docs/mlplcode.org"
+    # org-babel-tangle does not create target directories.
+    for tangled in $(cd "$work" && find . -type f | sort); do
+        mkdir -p "$ework/$(dirname "${tangled#./}")"
+    done
+    if "$emacs" --batch -l org --eval "(progn (add-to-list 'org-babel-tangle-lang-exts '(\"mlpl\" . \"mlpl\")) (org-babel-tangle-file \"$ework/docs/mlplcode.org\"))" >/dev/null 2>&1; then
+        for tangled in $(cd "$work" && find . -type f | sort); do
+            rel=${tangled#./}
+            cmp -s "$ework/$rel" "$repo_dir/$rel" || { echo "org-babel-tangle differs from the committed $rel" >&2; status=1; }
+        done
+        echo "tangle: $count files reproduced by awk and by org-babel-tangle ($emacs)"
+    else
+        echo "tangle: $count files reproduced by awk; org-babel-tangle failed to run, see $ework" >&2
+    fi
+    [ "$status" -eq 0 ] && rm -rf "$ework"
+else
+    echo "tangle: $count files reproduced by awk (no Emacs found to cross-check)"
+fi
+exit "$status"

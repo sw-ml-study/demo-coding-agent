@@ -1,0 +1,1998 @@
+#+title: mlplcode, a coding agent in sw-MLPL
+#+subtitle: a literate reading of every MLPL file in the agent
+#+author: Michael A Wright
+#+startup: showall
+#+property: header-args:mlpl :results output :exports both
+#+options: toc:2 num:t
+
+* How to read and run this document
+
+This is the agent, in the order a reader should meet it, with prose before
+every function. Each source block carries a ~:tangle~ target: tangling this
+file regenerates the committed sources byte for byte, and ~just check~ runs
+~scripts/check-tangle~ to prove it, so the prose can never describe code that
+no longer exists. The committed ~.mlpl~ files remain the source of truth;
+when they change, this document is edited to match.
+
+To evaluate a block in place with =C-c C-c=, load sw-MLPL's org-babel
+backend from the adjacent checkout. Evaluate this block once (it is not
+tangled):
+
+#+begin_src emacs-lisp :tangle no
+(add-to-list 'load-path (expand-file-name "../../sw-mlpl/elisp" (file-name-directory (buffer-file-name))))
+(require 'ob-mlpl)
+(setq org-babel-mlpl-command (expand-file-name "../../sw-mlpl/target/release/mlpl-repl" (file-name-directory (buffer-file-name))))
+#+end_src
+
+A block that defines functions evaluates silently; the blocks worth running
+are the small pure ones, and the entries need arguments, so run those from
+the shell with ~just loop~, ~just replay~, or ~just v0~.
+
+To regenerate the sources from this file: ~just tangle~.
+
+* MLPL in ten minutes
+
+The language is small and the agent uses a small part of it.
+
+- *Values.* Numbers, strings, string lists such as ~["a", "b"]~, and records
+  such as ~{tool: "read", path: "src/lib.mlpl"}~. Records are immutable
+  values; to change one, build a new one. A field is read with a dot:
+  ~action.tool~.
+- *Functions.* ~def u:name(a, b) { "docstring"; body }~. The ~u:~ prefix
+  marks a user-defined function. The first expression is a docstring. The
+  last expression is the return value; there is no ~return~ keyword and no
+  early return, which is why the code nests ~if~ ... ~else~ instead of
+  returning early, and why a six-way choice is a six-deep chain (there is no
+  ~else if~ or ~match~).
+- *Results.* Anything that can fail answers ~ok(value)~ or ~err(message)~.
+  ~is_ok~, ~is_err~, ~unwrap~, ~unwrap_or~, and ~err_message~ take them
+  apart. Writing ~?~ after an expression inside a function means: if this is
+  an ~err~, return it from the function now. That is the only early exit.
+- *Function references.* ~:u:name~ is a reference to a function.
+  ~call(f, x)~ invokes one. Calling with fewer arguments than the function
+  takes returns a partial, a value that remembers the bound arguments and
+  behaves like a smaller function. The agent's model, decision, and verify
+  hooks are all passed this way.
+- *Loops.* ~while cond { ... }~ with ~break~. ~if~ is an expression, so
+  ~x = if c { a } else { b }~ is common.
+- *Strings.* ~str_concat~, ~str_join(list, sep)~, ~str_split~, ~str_find~
+  (index or -1), ~str_slice(s, start, len)~, ~str_len~, ~str_eq~. String
+  lists are read with ~list_len~ and ~list_get~ (which answers a Result).
+  The code joins strings with ~str_concat~ and ~str_join~ rather than ~+~
+  because when it was written ~+~ rejected strings; that has since been
+  fixed upstream.
+- *Files.* ~read_text~, ~write_atomic~, ~fs_walk~, ~run_script~ are all
+  confined to a sandbox root given on the command line and answer Results.
+- *Modules.* ~include "file.mlpl"~ splices another file in, resolved
+  relative to the including file. A binding made at the top level of a file
+  is visible inside functions that run later, which the tools module uses
+  for the extension root.
+
+* The shape of the agent
+
+#+begin_example
+task -> build_context -> ask (injected) -> parse_action -> guards
+     -> authorize (allow | ask | deny) -> execute -> advanced state
+     ... until DONE is verified, an action is denied, the budget is spent,
+         or the model repeats itself
+#+end_example
+
+The model speaks a six-verb text protocol: READ, SEARCH, WRITE ... END,
+PATCH ... END, RUN, DONE. MLPL owns everything you see above. A small Rust
+extension supplies ripgrep search and allow-listed cargo/git; the sandboxed
+builtins supply reads, writes, and MLPL test runs.
+
+* prompts/act.md
+
+The system prompt is the only place the model learns the protocol. Every rule in it was added after a live run broke: fences, fabricated observations, copied example text, repeated actions. Placeholders such as ~<path>~ are deliberate; a concrete example path was once copied verbatim by a 7B model. It is tangled like code because the agent reads it with ~read_text~ at run time.
+
+#+begin_src text :tangle ../prompts/act.md
+You are mlplcode, a small coding agent working inside one project directory.
+Each turn you reply with exactly one action and nothing else. The system
+then sends you the observation. Use the file paths named in the task.
+
+The five actions, where <path> is a path from the task:
+
+READ <path>
+
+SEARCH <text>
+
+WRITE <path>
+<the complete file contents, raw text, no ``` fences>
+END
+
+PATCH <path>
+OLD
+<a few existing lines, copied exactly>
+NEW
+<the lines that replace them>
+END
+
+RUN mlpl <path>
+RUN cargo test --manifest-path <path to Cargo.toml>
+
+DONE <one-line summary>
+
+Shape of a WRITE, with the body's last line followed by END:
+
+WRITE <path>
+<first line of the file>
+<every other line of the file, exactly as it should be saved>
+<last line of the file>
+END
+
+Rules:
+- WRITE and PATCH end with END. READ, SEARCH, RUN, and DONE are a single line.
+- Prefer PATCH for a small change to a file you have read: the OLD block must
+  match the file exactly once. Use WRITE only for new files or rewrites.
+- Paths are relative to the project root; never use .. or a leading /.
+- Never write OBSERVATION, ERROR, or a result yourself; stop after your
+  action and wait for the system.
+- READ a file before you WRITE it; a write to an unread file is refused.
+- When rewriting a file you have read, keep every unchanged line exactly,
+  including comments, def, docstrings, and the ; after a docstring. Never
+  copy text from these instructions into a file.
+- Never send the same action twice in a row; if an action failed, change it.
+- Reply DONE only after a RUN observation showed status: ok.
+#+end_src
+
+* prompts/think.md
+
+The one-shot v0 agent uses this shorter prompt: read one file, answer in prose. It has no protocol because v0 never acts.
+
+#+begin_src text :tangle ../prompts/think.md
+You are a careful programmer reading exactly one source file.
+
+Answer in plain prose, under 120 words.
+First say what the file does.
+Then name the single most useful unit test it is missing and what it would assert.
+Refer only to functions that appear in the source. Do not invent code.
+#+end_src
+
+* How the model is injected: =agents/model.mlpl=
+
+A model is anything you can call with one prompt string and get one reply string back. Keeping that shape lets a test substitute a fixed reply for a live server, which is why nothing in the loop knows whether it is talking to Ollama.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+# Model injection: every agent takes a one-argument ask function; these are the standard ones.
+#+end_src
+
+** =u:ask_live=
+
+~llm_call~ is the language builtin that posts to an Ollama server. Binding the first three arguments with ~call(:u:ask_live, host, model, system)~ yields a partial, a plain value that behaves like a one-argument function. The entries build the live model this way.
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+def u:ask_live(host, model, system, prompt) {
+  "Ask a live Ollama model; bind host, model, and system with call() to get a one-argument ask.";
+  llm_call(host, prompt, model, system)
+}
+#+end_src
+
+** =u:ask_scripted=
+
+The simplest fake model: the same reply every time. Tests bind ~reply~ with ~call~ and get a deterministic one-argument ask.
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+def u:ask_scripted(reply, prompt) {
+  "Return a fixed reply for any prompt; bind reply with call() to get a deterministic ask.";
+  reply
+}
+#+end_src
+
+** =u:ask_echo=
+
+The echo model returns the prompt itself, so a test can assert on exactly what the model would have seen, for example that the source of a file really made it into the prompt.
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+def u:ask_echo(prompt) {
+  "Return the prompt unchanged so a test can inspect exactly what the model would see.";
+  prompt
+}
+#+end_src
+
+** =u:describe_action=
+
+Before asking a person to approve an action, the loop shows it in the protocol's own syntax. A WRITE shows its whole body and a PATCH both blocks, so approval is informed.
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+def u:describe_action(action) {
+  "Human-readable proposal of an action for an approval prompt.";
+  if str_eq(action.tool, "write") {
+    str_join(["WRITE ", action.path, "\n", action.body, "END"], "")
+  } else {
+    if str_eq(action.tool, "patch") {
+      str_join(["PATCH ", action.path, "\nOLD\n", action.old, "NEW\n", action.new, "END"], "")
+    } else {
+      if str_eq(action.tool, "run") {
+        str_concat("RUN ", str_join(action.argv, " "))
+      } else {
+        if str_eq(action.tool, "search") {
+          str_concat("SEARCH ", action.text)
+        } else {
+          str_concat("READ ", action.path)
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:is_yes=
+
+MLPL has no case folding, so the accepted spellings are enumerated. Anything else refuses, which is the safe default.
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+def u:is_yes(answer) {
+  "1 for y, Y, yes, or YES; everything else refuses.";
+  if str_eq(answer, "y") {
+    1
+  } else {
+    if str_eq(answer, "Y") {
+      1
+    } else {
+      if str_eq(answer, "yes") {
+        1
+      } else {
+        str_eq(answer, "YES")
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:decide_prompt=
+
+This is the interactive approval used by ~just loop~ at a terminal. ~read_stdin_chunk~ reads one bounded chunk; the first line is trimmed and checked. Two things are worth knowing: every stdin builtin refuses a real terminal (ledger finding F9), so the wrapper script feeds this function through a FIFO filled by ~cat /dev/tty~; and an error or end of input refuses rather than approving.
+
+#+begin_src mlpl :tangle ../agents/model.mlpl
+def u:decide_prompt(action) {
+  "Ask on stdin: print the proposal, read one line, approve only for y or yes; no input refuses.";
+  print("");
+  print("mlplcode wants to:");
+  print(u:describe_action(action));
+  print("approve? [y/N]");
+  chunk = read_stdin_chunk(256);
+  if is_err(chunk) {
+    print("no input available, refusing:", err_message(chunk));
+    0
+  } else {
+    first = unwrap(list_get(str_split(decode_bytes(unwrap(chunk).bytes), "\n"), 0));
+    u:is_yes(u:trim(first))
+  }
+}
+#+end_src
+
+* The action protocol parser: =agents/protocol.mlpl=
+
+The parser is the boundary between free text and data. A model reply comes in as one string; what comes out is either ~ok(record)~ with a ~tool~ field or ~err(reason)~. Nothing downstream ever looks at the raw text again.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+# Action protocol parser: one model reply becomes an action record or a named err.
+#+end_src
+
+** =u:has_prefix=
+
+~str_find~ returns the index of the first occurrence or -1, so a prefix is simply a match at index zero.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:has_prefix(s, prefix) {
+  "1 when s starts with prefix, else 0.";
+  if str_find(s, prefix) == 0 {
+    1
+  } else {
+    0
+  }
+}
+#+end_src
+
+** =u:has_verb=
+
+A verb must be a whole word: ~READ~ alone or ~READ~ followed by a space. Without this, ~READING the file~ parsed as a read of ~ING the file~.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:has_verb(line, verb) {
+  "1 when line is exactly verb or starts with verb followed by a space.";
+  if str_eq(line, verb) {
+    1
+  } else { u:has_prefix(line, str_concat(verb, " ")) }
+}
+#+end_src
+
+** =u:is_blank_char=
+
+The characters trimming removes. Newlines are deliberately not blank here; line splitting handles them.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:is_blank_char(c) {
+  "1 for a space, tab, or carriage return character.";
+  if str_eq(c, " ") {
+    1
+  } else {
+    if str_eq(c, "\t") {
+      1
+    } else {
+      str_eq(c, "\r")
+    }
+  }
+}
+#+end_src
+
+** =u:rtrim=
+
+MLPL has no ~str_trim~, so trimming is written out: walk back from the end while the last character is blank, then slice. ~while~ with ~break~ is the language's loop; ~str_slice~ is character indexed.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:rtrim(s) {
+  "Strip trailing spaces, tabs, and carriage returns; MLPL has no str_trim.";
+  n = str_len(s);
+  while n > 0 {
+    if u:is_blank_char(str_slice(s, n - 1, 1)) {
+      n = n - 1
+    } else {
+      break
+    }
+  };
+  str_slice(s, 0, n)
+}
+#+end_src
+
+** =u:ltrim=
+
+The mirror image of ~u:rtrim~ for the front of the string.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:ltrim(s) {
+  "Strip leading spaces and tabs.";
+  n = str_len(s);
+  i = 0;
+  while i < n {
+    if u:is_blank_char(str_slice(s, i, 1)) {
+      i = i + 1
+    } else {
+      break
+    }
+  };
+  str_slice(s, i, n - i)
+}
+#+end_src
+
+** =u:trim=
+
+Both ends. Composed rather than written a third time.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:trim(s) {
+  "Strip both ends.";
+  u:ltrim(u:rtrim(s))
+}
+#+end_src
+
+** =u:normalize_newlines=
+
+Windows line endings are folded into plain newlines up front, so every later check can assume ~\n~. Splitting on the two-character sequence and rejoining is the idiom for replace in a language without ~str_replace~.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:normalize_newlines(text) {
+  "Turn CRLF into LF so line splitting is uniform.";
+  str_join(str_split(text, "\r\n"), "\n")
+}
+#+end_src
+
+** =u:is_verb_line=
+
+Used to detect a second action hiding after the first. The nested ~if~ chain is how MLPL spells a six-way choice: there is no ~else if~ and no ~match~ (ledger finding F7).
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:is_verb_line(line) {
+  "1 when a trimmed line starts with one of the six protocol verbs.";
+  if u:has_verb(line, "READ") {
+    1
+  } else {
+    if u:has_verb(line, "SEARCH") {
+      1
+    } else {
+      if u:has_verb(line, "WRITE") {
+        1
+      } else {
+        if u:has_verb(line, "RUN") {
+          1
+        } else {
+          if u:has_verb(line, "PATCH") {
+            1
+          } else { u:has_verb(line, "DONE") }
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:argument_after=
+
+Everything after the verb word, trimmed. The verb's length is the slice start.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:argument_after(line, verb) {
+  "The trimmed remainder of line after the verb word.";
+  u:trim(str_slice(line, str_len(verb), str_len(line)))
+}
+#+end_src
+
+** =u:validate_path=
+
+Paths are the security edge of the whole agent. A path must be non-empty, relative, and free of ~..~ components; the sandboxed builtins would refuse escapes anyway, but refusing here gives the model a clear observation instead of a filesystem error.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:validate_path(path) {
+  "ok(path) for a non-empty relative path with no .. component; err otherwise.";
+  if str_len(path) == 0 {
+    err("empty path")
+  } else {
+    if u:has_prefix(path, "/") {
+      err(str_concat("absolute path not allowed: ", path))
+    } else {
+      if u:has_parent_component(path) {
+        err(str_concat("path may not contain ..: ", path))
+      } else {
+        ok(path)
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:has_parent_component=
+
+Only a component that is exactly ~..~ counts, so a file called ~lib..rs.bak~ is still allowed.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:has_parent_component(path) {
+  "1 when any slash-separated component of path is exactly ..";
+  parts = str_split(path, "/");
+  n = list_len(parts);
+  i = 0;
+  found = 0;
+  while i < n {
+    if str_eq(unwrap(list_get(parts, i)), "..") {
+      found = 1
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+#+end_src
+
+** =u:split_words=
+
+A RUN command becomes an argv list. Tabs are folded into spaces, then empty words from repeated spaces are dropped. String lists cannot be appended to and there is no filter, so the words are re-joined into one string and split once more; ledger finding F8 records this awkwardness.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:split_words(text) {
+  "Split on spaces and tabs, dropping empty words; MLPL has no list filter.";
+  raw = str_split(str_join(str_split(text, "\t"), " "), " ");
+  n = list_len(raw);
+  i = 0;
+  joined = "";
+  while i < n {
+    word = unwrap(list_get(raw, i));
+    if str_len(word) > 0 {
+      joined = if str_len(joined) == 0 {
+        word
+      } else {
+        str_join([joined, word], " ")
+      }
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  str_split(joined, " ")
+}
+#+end_src
+
+** =u:first_content_line_after=
+
+Index of the first non-blank line at or after a position, or -1. The ~break~ inside the ~if~ is how MLPL leaves a ~while~ early.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:first_content_line_after(lines, from) {
+  "Index of the first non-blank line at or after from, or -1.";
+  n = list_len(lines);
+  i = from;
+  found = -1;
+  while i < n {
+    if str_len(u:trim(unwrap(list_get(lines, i)))) > 0 {
+      found = i;
+      break
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+#+end_src
+
+** =u:first_content_line=
+
+The same search from the start of the reply. Kept separate so the common case reads plainly.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:first_content_line(lines) {
+  "Index of the first non-blank line, or -1.";
+  n = list_len(lines);
+  i = 0;
+  found = -1;
+  while i < n {
+    if str_len(u:trim(unwrap(list_get(lines, i)))) > 0 {
+      found = i;
+      break
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+#+end_src
+
+** =u:rest_after=
+
+After a complete action nothing else may follow, with three tolerated exceptions learned from live transcripts: blank lines, a lone markdown fence, and a fabricated ~OBSERVATION:~ block that some models write to continue the transcript themselves. A second verb is the error "more than one action"; any other text is named in the error.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:rest_after(lines, start) {
+  "ok(1) when only blanks, fence lines, or a fabricated OBSERVATION: block follow start; err otherwise.";
+  n = list_len(lines);
+  i = start;
+  result = ok(1);
+  while i < n {
+    line = u:trim(unwrap(list_get(lines, i)));
+    line = if u:is_fence_line(line) {
+      ""
+    } else {
+      line
+    };
+    if str_len(line) > 0 {
+      result = if str_eq(line, "OBSERVATION:") {
+        ok(1)
+      } else {
+        if u:is_verb_line(line) {
+          err("more than one action")
+        } else {
+          err(str_concat("unexpected text after action: ", line))
+        }
+      };
+      i = n
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  result
+}
+#+end_src
+
+** =u:is_fence_line=
+
+A fence is three backticks optionally followed by one language word, and nothing else on the line.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:is_fence_line(line) {
+  "1 when a line is only a markdown fence: three backticks, optionally followed by one language word.";
+  trimmed = u:trim(line);
+  if u:has_prefix(trimmed, "```") {
+    if str_find(str_slice(trimmed, 3, str_len(trimmed)), " ") < 0 {
+      1
+    } else {
+      0
+    }
+  } else {
+    0
+  }
+}
+#+end_src
+
+** =u:join_lines=
+
+Rebuilds a body from a half-open range of lines, each followed by a newline, so a written file always ends with one.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:join_lines(lines, first, last) {
+  "Join lines[first, last) each followed by a newline.";
+  body = "";
+  i = first;
+  while i < last {
+    body = str_concat(body, str_concat(unwrap(list_get(lines, i)), "\n"));
+    i = i + 1
+  };
+  body
+}
+#+end_src
+
+** =u:strip_outer_fences=
+
+Models like to wrap a WRITE body in a code fence, sometimes after a blank line. The outermost fence lines are dropped; a fence in the middle of a file is content and stays.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:strip_outer_fences(lines, first, last) {
+  "Body text for lines[first, last): leading blanks plus an opening fence and a closing fence are dropped; inner fences are content.";
+  lead = first;
+  while lead < last {
+    if str_len(u:trim(unwrap(list_get(lines, lead)))) == 0 {
+      lead = lead + 1
+    } else {
+      break
+    }
+  };
+  from = if lead < last {
+    if u:is_fence_line(unwrap(list_get(lines, lead))) {
+      lead + 1
+    } else {
+      first
+    }
+  } else {
+    first
+  };
+  to = if last > from {
+    if u:is_fence_line(unwrap(list_get(lines, last - 1))) {
+      last - 1
+    } else {
+      last
+    }
+  } else {
+    last
+  };
+  u:join_lines(lines, from, to)
+}
+#+end_src
+
+** =u:parse_write=
+
+Find the ~END~ line, refuse if it is missing, refuse if anything but the tolerated noise follows it, then hand the body lines to the fence stripper. The ~?~ after ~u:rest_after~ is MLPL's early return on ~err~: if that call fails, this function returns that same ~err~.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:parse_write(lines, start, path) {
+  "Collect body lines after start up to END, dropping outer fence lines; err on missing END or text after it.";
+  n = list_len(lines);
+  i = start + 1;
+  end_at = -1;
+  while i < n {
+    if str_eq(u:rtrim(unwrap(list_get(lines, i))), "END") {
+      end_at = i;
+      break
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  if end_at < 0 {
+    err("missing END after WRITE body")
+  } else {
+    u:rest_after(lines, end_at + 1)?;
+    ok({tool: "write", path: path, body: u:strip_outer_fences(lines, start + 1, end_at)})
+  }
+}
+#+end_src
+
+** =u:find_marker=
+
+A marker line is matched after trimming trailing blanks, so ~END ~ with a stray space still terminates.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:find_marker(lines, from, marker) {
+  "Index of the first line equal to marker at or after from, or -1.";
+  n = list_len(lines);
+  i = from;
+  found = -1;
+  while i < n {
+    if str_eq(u:rtrim(unwrap(list_get(lines, i))), marker) {
+      found = i;
+      break
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  found
+}
+#+end_src
+
+** =u:parse_patch=
+
+PATCH has three markers. ~OLD~ must be the very next line, ~NEW~ and ~END~ must follow in order, and the OLD block must not be empty, because an empty search text would match everywhere. Both blocks are joined with trailing newlines so they line up with file text.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:parse_patch(lines, start, path) {
+  "PATCH <path>, OLD, old lines, NEW, new lines, END: exact old text replaced by new text; err on any missing marker.";
+  old_at = u:find_marker(lines, start + 1, "OLD");
+  if old_at != start + 1 {
+    err("PATCH needs a line OLD directly after the path")
+  } else {
+    new_at = u:find_marker(lines, old_at + 1, "NEW");
+    if new_at < 0 {
+      err("missing NEW after the OLD block")
+    } else {
+      end_at = u:find_marker(lines, new_at + 1, "END");
+      if end_at < 0 {
+        err("missing END after the NEW block")
+      } else {
+        if new_at == old_at + 1 {
+          err("the OLD block must not be empty")
+        } else {
+          u:rest_after(lines, end_at + 1)?;
+          ok({tool: "patch", path: path, old: u:join_lines(lines, old_at + 1, new_at), new: u:join_lines(lines, new_at + 1, end_at)})
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:parse_done=
+
+A summary may spill onto later lines; they are joined so nothing the model said about its work is lost.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:parse_done(lines, start, first) {
+  "Join the summary on the DONE line with any following non-blank lines.";
+  n = list_len(lines);
+  i = start + 1;
+  summary = first;
+  while i < n {
+    line = u:rtrim(unwrap(list_get(lines, i)));
+    if str_len(u:trim(line)) > 0 {
+      summary = str_join([summary, line], "\n")
+    } else {
+      0
+    };
+    i = i + 1
+  };
+  ok({tool: "done", summary: summary})
+}
+#+end_src
+
+** =u:parse_action=
+
+The entry point. Normalize newlines, find the first content line, drop a copied ~ACTION:~ header if the model echoed one, then dispatch on the verb. Each branch validates its argument and returns a record with a ~tool~ field. Read this function top to bottom and you have read the whole protocol.
+
+#+begin_src mlpl :tangle ../agents/protocol.mlpl
+def u:parse_action(text) {
+  "Parse exactly one protocol action from a model reply: ok(record) or err(reason).";
+  lines = str_split(u:normalize_newlines(text), "\n");
+  start = u:first_content_line(lines);
+  start = if start >= 0 {
+    if str_eq(u:trim(unwrap(list_get(lines, start))), "ACTION:") { u:first_content_line_after(lines, start + 1) } else {
+      start
+    }
+  } else {
+    start
+  };
+  if start < 0 {
+    err("empty reply")
+  } else {
+    line = u:trim(unwrap(list_get(lines, start)));
+    if u:has_verb(line, "READ") {
+      path = u:validate_path(u:argument_after(line, "READ"))?;
+      u:rest_after(lines, start + 1)?;
+      ok({tool: "read", path: path})
+    } else {
+      if u:has_verb(line, "SEARCH") {
+        query = u:argument_after(line, "SEARCH");
+        if str_len(query) == 0 {
+          err("empty search text")
+        } else {
+          u:rest_after(lines, start + 1)?;
+          ok({tool: "search", text: query})
+        }
+      } else {
+        if u:has_verb(line, "WRITE") {
+          path = u:validate_path(u:argument_after(line, "WRITE"))?;
+          u:parse_write(lines, start, path)
+        } else {
+          if u:has_verb(line, "PATCH") {
+            path = u:validate_path(u:argument_after(line, "PATCH"))?;
+            u:parse_patch(lines, start, path)
+          } else {
+            if u:has_verb(line, "RUN") {
+              command = u:argument_after(line, "RUN");
+              if str_len(command) == 0 {
+                err("empty command")
+              } else {
+                u:rest_after(lines, start + 1)?;
+                ok({tool: "run", argv: u:split_words(command)})
+              }
+            } else {
+              if u:has_verb(line, "DONE") {
+                u:parse_done(lines, start, u:argument_after(line, "DONE"))
+              } else {
+                err(str_concat("unknown verb: ", line))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+* Mechanisms: running tests, searching, patching: =agents/tools.mlpl=
+
+Mechanisms live here: what actually happens when an action is executed. The one piece of state in the whole agent is ~agent_tools_root~, a module-level binding that the live entry sets after loading the Rust extension. Functions see the current value of a module binding when they run, which is why it can be assigned once in the entry and read everywhere.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+# RUN and SEARCH mechanisms: pure-MLPL run_script for mlpl files, the agent-tools extension for cargo, git, and search.
+#+end_src
+
+** Top level, part 1
+
+Empty until an entry loads the extension; every function that needs the extension checks it first.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+# Project root handed to the agent-tools extension; empty until the entry loads the library.
+agent_tools_root = "";
+#+end_src
+
+** =u:run_kind=
+
+RUN is classified by its first word. ~mlpl~ runs in pure MLPL, ~cargo~ and ~git~ go to the extension under their own permissions, and anything else is ~shell~, which never executes.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:run_kind(argv) {
+  "Classify argv: mlpl (run_script), cargo or git (extension, separately permissioned), else shell.";
+  first = if list_len(argv) > 0 {
+    unwrap(list_get(argv, 0))
+  } else {
+    ""
+  };
+  if str_eq(first, "mlpl") {
+    "mlpl"
+  } else {
+    if str_eq(first, "cargo") {
+      "cargo"
+    } else {
+      if str_eq(first, "git") {
+        "git"
+      } else {
+        "shell"
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:native_loaded=
+
+A non-empty root means the extension is loaded. Without it the agent still works on MLPL projects; only SEARCH and RUN cargo/git are missing.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:native_loaded() {
+  "1 when the entry has loaded the agent-tools extension and set its root.";
+  if str_len(agent_tools_root) > 0 {
+    1
+  } else {
+    0
+  }
+}
+#+end_src
+
+** =u:render_native_run=
+
+The extension answers a record with ~status~, ~stdout~, ~stderr~, and ~timed_out~. It is rendered into the plain text the model reads next turn; ~status: 0~ is the line the verifier looks for.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:render_native_run(outcome) {
+  "Observation text for an extension run: status, timeout flag, then stdout and stderr.";
+  head = str_join(["status: ", to_string(outcome.status), if outcome.timed_out {
+        " (timed out after 120 s)"
+      } else {
+        ""
+      }], "");
+  body = str_join(["stdout:", outcome.stdout, "stderr:", outcome.stderr], "\n");
+  str_join([head, body], "\n")
+}
+#+end_src
+
+** =u:native_result=
+
+A call across the extension boundary answers either a record or, when the Rust side refused (for example a command outside its allow-list), an ~err~. ~type_of~ tells the two apart so both become ordinary values here.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:native_result(result) {
+  "An extension call answers a record, or err(message) when Rust refused it; make both an observation-ready value.";
+  if str_eq(type_of(result), "result") {
+    if is_err(result) {
+      err(str_concat("ERROR: ", err_message(result)))
+    } else {
+      ok(unwrap(result))
+    }
+  } else {
+    ok(result)
+  }
+}
+#+end_src
+
+** =u:run_native=
+
+cargo and git go through ~_agent_tools:run~, which enforces the allow-list again in Rust, runs in the project root with a timeout, and never touches a shell.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:run_native(argv) {
+  "Run cargo or git through the extension inside the project root, or say the extension is not loaded.";
+  if u:native_loaded() {
+    outcome = u:native_result(_agent_tools:run(agent_tools_root, str_join(argv, " ")));
+    if is_err(outcome) {
+      err_message(outcome)
+    } else { u:render_native_run(unwrap(outcome)) }
+  } else {
+    str_join(["run: ", u:run_kind(argv), " needs the agent-tools extension (not loaded)"], "")
+  }
+}
+#+end_src
+
+** =u:render_search=
+
+Search results are rendered as a count and then ~path:line:text~ lines, bounded by the extension so a broad pattern cannot flood the context.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:render_search(found) {
+  "Observation text for a search record: count, truncation flag, then the path:line:text lines.";
+  if found.count == 0 {
+    "no matches"
+  } else {
+    str_join([to_string(found.count), " match(es)", if found.truncated {
+          " (truncated)"
+        } else {
+          ""
+        }, "\n", found.matches], "")
+  }
+}
+#+end_src
+
+** =u:search_tool=
+
+SEARCH is ripgrep over the project when the extension is loaded. It honours ~.gitignore~ and never follows symlinks.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:search_tool(text) {
+  "Search the project through the extension; without it observe that search is not available.";
+  if u:native_loaded() {
+    found = u:native_result(_agent_tools:search(agent_tools_root, text));
+    if is_err(found) {
+      err_message(found)
+    } else { u:render_search(unwrap(found)) }
+  } else {
+    "search needs the agent-tools extension (not loaded)"
+  }
+}
+#+end_src
+
+** =u:run_refused=
+
+The refusal is an observation the model can read and react to, not an exception.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:run_refused(argv) {
+  "The observation for a command outside the allow-list; nothing is executed.";
+  err(str_concat("run: command not allowed: ", str_join(argv, " ")))
+}
+#+end_src
+
+** =u:run_allowed=
+
+For MLPL projects only one shape is allowed: ~mlpl <path>~ with a path that passes the same validation as READ and WRITE.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:run_allowed(argv) {
+  "ok(path) only when argv is exactly mlpl <relative path> with a safe path; err otherwise.";
+  if list_len(argv) == 2 {
+    if str_eq(unwrap(list_get(argv, 0)), "mlpl") {
+      path = unwrap(list_get(argv, 1));
+      if is_ok(u:validate_path(path)) {
+        ok(path)
+      } else { u:run_refused(argv) }
+    } else {
+      u:run_refused(argv)
+    }
+  } else {
+    u:run_refused(argv)
+  }
+}
+#+end_src
+
+** =u:render_event=
+
+~run_script~ captures the child's test events as JSON lines. Only ~test_end~ events are shown, one per line, with the diagnostic on failure; ~parse_json~ turns a line into a record.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:render_event(line) {
+  "One captured test event as a short line; only test_end events are rendered, others give an empty string.";
+  parsed = parse_json(line);
+  if is_err(parsed) {
+    ""
+  } else {
+    e = unwrap(parsed);
+    if str_eq(e.kind, "test_end") {
+      if str_eq(e.status, "failed") {
+        str_join(["failed: ", e.name, " -- ", e.diagnostic], "")
+      } else {
+        str_join([e.status, ": ", e.name], "")
+      }
+    } else {
+      ""
+    }
+  }
+}
+#+end_src
+
+** =u:render_run=
+
+The observation for an MLPL test run: status, the file's final value, any error, then the finished tests. This is what "run the tests" looks like to the model.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:render_run(outcome) {
+  "Observation text for a run_script outcome: status, value, error if any, then one line per finished test.";
+  lines = str_join(["status: ", outcome.status, "\n", "value: ", outcome.value], "");
+  lines = if str_len(outcome.error) > 0 {
+    str_join([lines, "\n", "error: ", outcome.error], "")
+  } else {
+    lines
+  };
+  n = list_len(outcome.events);
+  i = 0;
+  while i < n {
+    rendered = u:render_event(unwrap(list_get(outcome.events, i)));
+    lines = if str_len(rendered) > 0 {
+      str_join([lines, "\n", rendered], "")
+    } else {
+      lines
+    };
+    i = i + 1
+  };
+  lines
+}
+#+end_src
+
+** =u:run_mlpl=
+
+~run_script~ executes an MLPL file in a fresh environment inside the sandbox and returns its outcome as data. The example project's tests run this way with no test runner installed, because the assertion library is vendored beside them.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:run_mlpl(path) {
+  "Execute one MLPL file inside the sandbox through run_script and render the outcome.";
+  result = run_script(path, {source_dir: ".", capture: 1});
+  if is_ok(result) { u:render_run(unwrap(result)) } else {
+    str_concat("ERROR: ", err_message(result))
+  }
+}
+#+end_src
+
+** =u:run_tool=
+
+Dispatch by kind. Note that ~shell~ is refused here regardless of the permission record; the permission only decides whether the refusal ends the run.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:run_tool(argv) {
+  "Dispatch by kind: mlpl through run_script, cargo and git through the extension, shell refused as an observation.";
+  kind = u:run_kind(argv);
+  if str_eq(kind, "mlpl") {
+    allowed = u:run_allowed(argv);
+    if is_ok(allowed) { u:run_mlpl(unwrap(allowed)) } else {
+      err_message(allowed)
+    }
+  } else {
+    if str_eq(kind, "shell") {
+      err_message(u:run_refused(argv))
+    } else { u:run_native(argv) }
+  }
+}
+#+end_src
+
+** =u:apply_patch=
+
+PATCH in pure MLPL: read the file, require the OLD block to occur exactly once, splice the NEW block in with three slices, and write atomically. Zero or several occurrences are reported and the file is left alone.
+
+#+begin_src mlpl :tangle ../agents/tools.mlpl
+def u:apply_patch(path, old, new) {
+  "Replace exactly one occurrence of old with new in path via write_atomic; the observation names any mismatch.";
+  current = read_text(path);
+  if is_err(current) {
+    str_concat("ERROR: ", err_message(current))
+  } else {
+    text = unwrap(current);
+    hits = u:count_occurrences(text, old);
+    if hits != 1 {
+      str_join(["PATCH ERROR: the OLD block occurs ", to_string(hits), " time(s) in ", path, "; it must occur exactly once"], "")
+    } else {
+      at = str_find(text, old);
+      updated = str_join([str_slice(text, 0, at), new, str_slice(text, at + str_len(old), str_len(text))], "");
+      u:observe_result(write_atomic(path, updated), str_concat("patched ", path))
+    }
+  }
+}
+#+end_src
+
+* The loop: =agents/loop.mlpl=
+
+The loop is the agent. One record flows through pure functions: build the prompt, ask, parse, guard, authorize, execute, update. The three ~include~ lines pull in the model helpers, the parser, and the mechanisms; ~include~ resolves relative to this file.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+# Bounded coding-agent loop: observe, decide, act, update over one state record.
+include "model.mlpl";
+include "protocol.mlpl";
+include "tools.mlpl";
+#+end_src
+
+** =u:loop_initial_state=
+
+The whole state of a run is one record. ~history~ is the transcript so far, ~files~ a newline-joined list of paths touched, ~budget~ the step limit, and ~done~, ~reason~, ~answer~ the outcome. ~last_reply~ and ~repeats~ feed the repeated-action guard.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:loop_initial_state(task, budget) {
+  "Fresh state: no history, no files touched, iteration 0, not stopped.";
+  {task: task, iteration: 0, history: "", files: "", budget: budget, done: 0, reason: "", answer: "", last_reply: "", repeats: 0}
+}
+#+end_src
+
+** =u:build_context=
+
+The prompt is the task plus the transcript so far. It is a pure function of the state, so tests pin its exact text.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:build_context(state) {
+  "Compose the prompt from task and history; pure so tests can pin the exact text.";
+  str_join(["TASK:", state.task, "", "WORK SO FAR:", state.history, "", "Choose the next action."], "\n")
+}
+#+end_src
+
+** =u:authorize_run=
+
+RUN permissions depend on the kind: git has its own field because it can change history, and shell is a separate field that defaults to deny.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:authorize_run(argv, permissions) {
+  "RUN policy by kind: mlpl and cargo under run, git under git, anything else under shell.";
+  kind = u:run_kind(argv);
+  if str_eq(kind, "git") {
+    permissions.git
+  } else {
+    if str_eq(kind, "shell") {
+      permissions.shell
+    } else {
+      permissions.run
+    }
+  }
+}
+#+end_src
+
+** =u:authorize=
+
+The single authorization point. It is a lookup from the action's tool into the permission record and returns ~allow~, ~ask~, or ~deny~. PATCH is a write. DONE is always allowed here because completion is gated elsewhere.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:authorize(action, permissions) {
+  "Pure policy lookup: allow, ask, or deny for the action's tool; done is always allowed.";
+  if str_eq(action.tool, "read") {
+    permissions.read
+  } else {
+    if str_eq(action.tool, "search") {
+      permissions.search
+    } else {
+      if str_eq(action.tool, "write") {
+        permissions.write
+      } else {
+        if str_eq(action.tool, "patch") {
+          permissions.write
+        } else {
+          if str_eq(action.tool, "run") {
+            u:authorize_run(action.argv, permissions)
+          } else {
+            "allow"
+          }
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:decide_yes=
+
+One of the three answers to an ~ask~: approve everything, used by tests and by ~LOOP_APPROVE=1~.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:decide_yes(action) {
+  "Approve every ask; used by tests and by LOOP_APPROVE=1.";
+  1
+}
+#+end_src
+
+** =u:decide_no=
+
+Refuse everything: the default for a run with no terminal, so a script can never make the agent write by accident.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:decide_no(action) {
+  "Refuse every ask; the live default so an unattended run never writes.";
+  0
+}
+#+end_src
+
+** =u:observe_result=
+
+Builtins answer ~Result~ values. This turns one into observation text: the success text on ~ok~, an ~ERROR:~ line on ~err~. Errors are information for the model, never crashes.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:observe_result(result, success_text) {
+  "Render a builtin Result as observation text: the payload or an ERROR line.";
+  if is_ok(result) {
+    success_text
+  } else {
+    str_concat("ERROR: ", err_message(result))
+  }
+}
+#+end_src
+
+** =u:execute=
+
+The only place side effects happen, and every branch is a sandboxed builtin or an extension call. Read returns the file, write and patch confirm the path, search and run delegate to the tool module.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:execute(action) {
+  "Run one authorized action inside the sandbox and return the observation text.";
+  if str_eq(action.tool, "read") {
+    result = read_text(action.path);
+    u:observe_result(result, unwrap_or(result, ""))
+  } else {
+    if str_eq(action.tool, "write") {
+      u:observe_result(write_atomic(action.path, action.body), str_concat("wrote ", action.path))
+    } else {
+      if str_eq(action.tool, "patch") {
+        u:apply_patch(action.path, action.old, action.new)
+      } else {
+        if str_eq(action.tool, "search") {
+          u:search_tool(action.text)
+        } else {
+          if str_eq(action.tool, "run") {
+            u:run_tool(action.argv)
+          } else {
+            "no-op"
+          }
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:touched_path=
+
+Reads, writes, and patches record their path so the read-before-write guard can consult it.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:touched_path(action) {
+  "The path an action touches, or an empty string.";
+  if str_eq(action.tool, "read") {
+    action.path
+  } else {
+    if str_eq(action.tool, "write") {
+      action.path
+    } else {
+      if str_eq(action.tool, "patch") {
+        action.path
+      } else {
+        ""
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:advanced=
+
+The state after a step that did not stop: the transcript grows by an ~ACTION:~ and ~OBSERVATION:~ entry, the touched path is appended, and ~repeats~ counts how many times in a row the model has sent the same reply. Records are values, so a new one is built rather than mutated.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:advanced(state, reply, observation, path) {
+  "The next state after a step: history grows, files may grow, repeats count identical replies, not stopped.";
+  entry = str_join(["", "", "ACTION:", reply, "", "OBSERVATION:", observation], "\n");
+  files = if str_len(path) == 0 {
+    state.files
+  } else {
+    str_concat(state.files, str_concat(path, "\n"))
+  };
+  repeats = if str_eq(reply, state.last_reply) {
+    state.repeats + 1
+  } else {
+    0
+  };
+  {task: state.task, iteration: state.iteration + 1, history: str_concat(state.history, entry), files: files, budget: state.budget, done: 0, reason: "", answer: "", last_reply: reply, repeats: repeats}
+}
+#+end_src
+
+** =u:stopped=
+
+A terminal state. The reason is data: ~done~, ~denied~, ~budget~, or ~stuck~.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:stopped(state, iteration, reason, answer) {
+  "A terminal state carrying the stop reason as a value.";
+  {task: state.task, iteration: iteration, history: state.history, files: state.files, budget: state.budget, done: 1, reason: reason, answer: answer, last_reply: state.last_reply, repeats: state.repeats}
+}
+#+end_src
+
+** =u:last_index=
+
+Index of the last occurrence of a substring, written with a ~while 1~ loop and ~break~ because ~str_find~ only finds the first.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:last_index(s, needle) {
+  "Character index of the last occurrence of needle in s, or -1.";
+  found = -1;
+  offset = 0;
+  rest = s;
+  while 1 {
+    at = str_find(rest, needle);
+    if at < 0 {
+      break
+    } else {
+      found = offset + at;
+      offset = offset + at + str_len(needle);
+      rest = str_slice(s, offset, str_len(s))
+    }
+  };
+  found
+}
+#+end_src
+
+** =u:verify_always=
+
+The permissive verifier: accept any DONE. Used where a task names no evidence.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:verify_always(state) {
+  "Accept every DONE; the default when a task names no evidence.";
+  ok(1)
+}
+#+end_src
+
+** =u:last_edit_index=
+
+The later of the last WRITE and the last PATCH in the transcript.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:last_edit_index(history) {
+  "Character index of the last WRITE or PATCH action in history, or -1.";
+  write_at = u:last_index(history, "\nACTION:\nWRITE ");
+  patch_at = u:last_index(history, "\nACTION:\nPATCH ");
+  if write_at > patch_at {
+    write_at
+  } else {
+    patch_at
+  }
+}
+#+end_src
+
+** =u:last_passing_run=
+
+A passing run is ~status: ok~ from an MLPL test file or ~status: 0~ from the extension.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:last_passing_run(history) {
+  "Character index of the last RUN observation that reported status ok (mlpl) or status 0 (extension), or -1.";
+  ok_at = u:last_index(history, "\nOBSERVATION:\nstatus: ok");
+  zero_at = u:last_index(history, "\nOBSERVATION:\nstatus: 0\n");
+  if ok_at > zero_at {
+    ok_at
+  } else {
+    zero_at
+  }
+}
+#+end_src
+
+** =u:run_reported_failure=
+
+Even with a passing status, the run text may name a failed test: an MLPL ~failed:~ line or cargo's ~FAILED~.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:run_reported_failure(tail) {
+  "1 when the text after a passing status still names a failed test (mlpl failed: lines or cargo FAILED).";
+  if str_find(tail, "failed: ") >= 0 {
+    1
+  } else {
+    if str_find(tail, "FAILED") >= 0 {
+      1
+    } else {
+      0
+    }
+  }
+}
+#+end_src
+
+** =u:verify_tests_passed=
+
+Verified completion. A DONE is accepted only if something was written or patched, a run passed after the last edit, and that run named no failure. This exists because live models declared success without running anything; the loop now answers ~NOT VERIFIED~ and continues.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:verify_tests_passed(state) {
+  "Accept DONE only after at least one successful WRITE or PATCH and a passing RUN after the last edit with no failed test.";
+  edited = if str_find(state.history, "\nOBSERVATION:\nwrote ") >= 0 {
+    1
+  } else {
+    str_find(state.history, "\nOBSERVATION:\npatched ") >= 0
+  };
+  last_ok = u:last_passing_run(state.history);
+  if edited == 0 {
+    err("no file has been written yet")
+  } else {
+    if last_ok < 0 {
+      err("no RUN observation with status: ok yet")
+    } else {
+      if last_ok < u:last_edit_index(state.history) {
+        err("files changed after the last passing RUN; run the tests again")
+      } else {
+        if u:run_reported_failure(str_slice(state.history, last_ok, str_len(state.history) - last_ok)) {
+          err("the last RUN reported a failed test")
+        } else {
+          ok(1)
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:approved=
+
+~allow~ is yes, ~deny~ is no, and ~ask~ defers to the injected decision function through ~call~.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:approved(verdict, action, decide) {
+  "1 when the verdict is allow, or ask and the injected decision says yes.";
+  if str_eq(verdict, "allow") {
+    1
+  } else {
+    if str_eq(verdict, "ask") {
+      call(decide, action)
+    } else {
+      0
+    }
+  }
+}
+#+end_src
+
+** =u:was_read=
+
+The touched-files string is searched with newline delimiters on both sides so ~lib.mlpl~ does not match ~lib.mlpl.bak~.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:was_read(state, path) {
+  "1 when path appears in the files touched so far this run.";
+  if str_find(str_concat("\n", state.files), str_join(["\n", path, "\n"], "")) >= 0 {
+    1
+  } else {
+    0
+  }
+}
+#+end_src
+
+** =u:unread_write=
+
+The read-before-write guard: editing an existing file that this run has not read is editing blind. New files are exempt, since there is nothing to read.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:unread_write(state, action) {
+  "1 when the action writes or patches an existing file that this run has not read: the model is editing blind.";
+  edits = if str_eq(action.tool, "write") {
+    1
+  } else {
+    str_eq(action.tool, "patch")
+  };
+  if edits {
+    if u:was_read(state, action.path) {
+      0
+    } else {
+      is_ok(read_text(action.path))
+    }
+  } else {
+    0
+  }
+}
+#+end_src
+
+** =u:loop_step=
+
+One transition. The repeated-action guard comes first: an identical reply is flagged once and stops the run the third time, which is what turned an endless thrash into a bounded failure.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:loop_step(state, ask, permissions, decide, verify) {
+  "One observe, decide, act, update transition; every outcome is a state value.";
+  reply = call(ask, u:build_context(state));
+  if str_eq(reply, state.last_reply) {
+    if state.repeats >= 1 {
+      u:stopped(state, state.iteration + 1, "stuck", "the same action was sent three times in a row")
+    } else {
+      u:advanced(state, reply, "REPEATED ACTION: same as the previous step; change your approach", "")
+    }
+  } else {
+    u:loop_step_fresh(state, reply, permissions, decide, verify)
+  }
+}
+#+end_src
+
+** =u:loop_step_fresh=
+
+The normal path: parse, and on failure observe the parse error; on DONE consult the verifier; otherwise apply the read-before-write guard, authorize, and either execute or stop as denied. Every branch returns a state.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:loop_step_fresh(state, reply, permissions, decide, verify) {
+  "Handle a reply that differs from the previous one: parse, guard, authorize, execute.";
+  parsed = u:parse_action(reply);
+  if is_err(parsed) {
+    u:advanced(state, reply, str_concat("PARSE ERROR: ", err_message(parsed)), "")
+  } else {
+    action = unwrap(parsed);
+    if str_eq(action.tool, "done") {
+      evidence = call(verify, state);
+      if is_ok(evidence) {
+        u:stopped(state, state.iteration + 1, "done", action.summary)
+      } else {
+        u:advanced(state, reply, str_concat("NOT VERIFIED: ", err_message(evidence)), "")
+      }
+    } else {
+      if u:unread_write(state, action) {
+        u:advanced(state, reply, str_join(["read ", action.path, " before writing it"], ""), "")
+      } else {
+        if u:approved(u:authorize(action, permissions), action, decide) {
+          u:advanced(state, reply, u:execute(action), u:touched_path(action))
+        } else {
+          u:stopped(state, state.iteration + 1, "denied", str_concat("denied: ", reply))
+        }
+      }
+    }
+  }
+}
+#+end_src
+
+** =u:run_loop=
+
+Run steps until the state says it is done or the budget is spent. The budget check happens before each step so a run can never exceed it.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:run_loop(task, budget, ask, permissions, decide, verify) {
+  "Run steps until a verified done, a denial, or the spent budget; returns the final state.";
+  state = u:loop_initial_state(task, budget);
+  while state.done == 0 {
+    if state.iteration >= state.budget {
+      state = u:stopped(state, state.iteration, "budget", "")
+    } else {
+      state = u:loop_step(state, ask, permissions, decide, verify)
+    }
+  };
+  state
+}
+#+end_src
+
+** =u:count_occurrences=
+
+Non-overlapping substring count, used by the scripted model and by PATCH.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:count_occurrences(s, needle) {
+  "Number of non-overlapping occurrences of needle in s.";
+  count = 0;
+  rest = s;
+  step = str_len(needle);
+  while 1 {
+    at = str_find(rest, needle);
+    if at < 0 {
+      break
+    } else {
+      count = count + 1;
+      rest = str_slice(rest, at + step, str_len(rest))
+    }
+  };
+  count
+}
+#+end_src
+
+** =u:ask_transcript=
+
+The scripted multi-turn model that tests and replays use. It is pure over the prompt: the number of ~ACTION:~ entries already in the transcript is the turn number, which selects the reply. Running out of replies yields a DONE so a test can never hang.
+
+#+begin_src mlpl :tangle ../agents/loop.mlpl
+def u:ask_transcript(replies, prompt) {
+  "Scripted multi-turn model: reply number equals the count of prior ACTION entries in the prompt.";
+  turn = u:count_occurrences(prompt, "\nACTION:\n");
+  unwrap_or(list_get(replies, turn), "DONE transcript exhausted")
+}
+#+end_src
+
+* Replaying a recorded run: =agents/replay_loop.mlpl=
+
+A saved live transcript can be replayed through the real loop: the model's replies come from the file, everything else happens for real. The README demo is recorded this way, so it needs no model server.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/replay_loop.mlpl
+# Replay a saved live transcript through the real loop: recorded model replies, real parser, writes, and test runs.
+include "loop.mlpl";
+#+end_src
+
+** =u:strip_trailing_newlines=
+
+~u:rtrim~ leaves newlines alone by design, so a separate helper drops them from an extracted reply.
+
+#+begin_src mlpl :tangle ../agents/replay_loop.mlpl
+def u:strip_trailing_newlines(s) {
+  "Drop trailing newline characters; u:rtrim leaves them alone.";
+  n = str_len(s);
+  while n > 0 {
+    if str_eq(str_slice(s, n - 1, 1), "\n") {
+      n = n - 1
+    } else {
+      break
+    }
+  };
+  str_slice(s, 0, n)
+}
+#+end_src
+
+** =u:transcript_replies=
+
+Each reply sits between an ~ACTION:~ header and the next ~OBSERVATION:~ header. The replies are collected into one string with a separator that cannot occur in a reply and split once, because string lists cannot be appended to.
+
+#+begin_src mlpl :tangle ../agents/replay_loop.mlpl
+def u:transcript_replies(text) {
+  "Extract the model replies from a saved transcript: the text between each ACTION: header and its OBSERVATION: header.";
+  entries = str_split(text, "\nACTION:\n");
+  n = list_len(entries);
+  i = 1;
+  joined = "";
+  while i < n {
+    entry = unwrap(list_get(entries, i));
+    cut = str_find(entry, "\nOBSERVATION:\n");
+    raw = if cut < 0 {
+      entry
+    } else {
+      str_slice(entry, 0, cut)
+    };
+    reply = u:strip_trailing_newlines(u:rtrim(raw));
+    joined = if i == 1 {
+      reply
+    } else {
+      str_join([joined, reply], "\n<<<REPLY>>>\n")
+    };
+    i = i + 1
+  };
+  str_split(joined, "\n<<<REPLY>>>\n")
+}
+#+end_src
+
+** =u:final_reply=
+
+The transcript ends with the run's summary line rather than a recorded DONE, so the DONE is rebuilt from it.
+
+#+begin_src mlpl :tangle ../agents/replay_loop.mlpl
+def u:final_reply(text) {
+  "The DONE line a saved transcript ended with, rebuilt from its stopped-after summary line.";
+  at = str_find(text, "\nstopped after ");
+  if at < 0 {
+    "DONE replay finished"
+  } else {
+    tail = str_slice(text, at + 1, str_len(text) - at - 1);
+    lines = str_split(tail, "\n");
+    if list_len(lines) > 1 {
+      str_concat("DONE ", unwrap(list_get(lines, 1)))
+    } else {
+      "DONE replay finished"
+    }
+  }
+}
+#+end_src
+
+** =u:replay_ask=
+
+Compose the recorded replies and the rebuilt DONE into a scripted model. The result is a partial of ~u:ask_transcript~ and drops straight into ~u:run_loop~.
+
+#+begin_src mlpl :tangle ../agents/replay_loop.mlpl
+def u:replay_ask(transcript_path) {
+  "A scripted model built from a transcript fixture: its recorded replies, then its recorded DONE.";
+  text = unwrap(read_text(transcript_path));
+  replies = u:transcript_replies(text);
+  all = str_join([str_join(replies, "\n<<<REPLY>>>\n"), u:final_reply(text)], "\n<<<REPLY>>>\n");
+  call(:u:ask_transcript, str_split(all, "\n<<<REPLY>>>\n"))
+}
+#+end_src
+
+* The smallest agent: =agents/v0_read_think.mlpl=
+
+The smallest agent: read one file, ask once, print the answer. It has no loop and no protocol; it exists to show that a coding agent starts as READ then THINK.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/v0_read_think.mlpl
+# v0 coding agent: read one file, think once, answer. The model is an injected function.
+include "model.mlpl";
+#+end_src
+
+** =u:v0_build_prompt=
+
+Task, blank line, source. ~str_join~ with a newline separator is how multi-line text is assembled.
+
+#+begin_src mlpl :tangle ../agents/v0_read_think.mlpl
+def u:v0_build_prompt(task, source) {
+  "Compose the TASK/SOURCE prompt the model sees; pure so tests can pin the exact text.";
+  str_join(["TASK:", task, "", "SOURCE:", source], "\n")
+}
+#+end_src
+
+** =u:v0_system_prompt=
+
+The system prompt is a file so it can be edited without touching code. ~read_text~ answers a ~Result~ and the caller decides what to do with an ~err~.
+
+#+begin_src mlpl :tangle ../agents/v0_read_think.mlpl
+def u:v0_system_prompt() {
+  "Read the system prompt from prompts/think.md through the sandboxed read; ok(text) or err.";
+  read_text("prompts/think.md")
+}
+#+end_src
+
+** =u:v0_think=
+
+Read, build, ask. The ~?~ after ~read_text~ returns the read error as this function's value, so a missing file is reported without ever calling the model.
+
+#+begin_src mlpl :tangle ../agents/v0_read_think.mlpl
+def u:v0_think(task, path, ask) {
+  "Read path, build the prompt, and ask the injected model; a read err propagates as a value.";
+  source = read_text(path)?;
+  prompt = u:v0_build_prompt(task, source);
+  ok(call(ask, prompt))
+}
+#+end_src
+
+* Entry: the v0 agent: =agents/run_v0.mlpl=
+
+Entries are the only files with top-level statements. They read arguments, build the injected functions, and print. ~args()~ is the list of command-line arguments after ~--~; ~unwrap_or~ supplies a default when an index is missing.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/run_v0.mlpl
+# Live entry for the v0 agent: mlpl-repl --source-dir <repo> -f agents/run_v0.mlpl -- HOST MODEL [FILE] [TASK]
+include "v0_read_think.mlpl";
+#+end_src
+
+** Top level, part 1
+
+Defaults follow the plan's model section: a local Ollama and the 7B coder model.
+
+#+begin_src mlpl :tangle ../agents/run_v0.mlpl
+host = unwrap_or(list_get(args(), 0), "http://localhost:11434");
+model = unwrap_or(list_get(args(), 1), "qwen2.5-coder:7b");
+path = unwrap_or(list_get(args(), 2), "examples/tiny-rust-project/src/lib.rs");
+task = unwrap_or(list_get(args(), 3), "Explain what this file does, then name the single most useful unit test it is missing.");
+#+end_src
+
+** Top level, part 2
+
+The live model is a partial of ~u:ask_live~; the agent function receives it like any other.
+
+#+begin_src mlpl :tangle ../agents/run_v0.mlpl
+system = unwrap(u:v0_system_prompt());
+ask = call(:u:ask_live, host, model, system);
+answer = u:v0_think(task, path, ask);
+#+end_src
+
+** Top level, part 3
+
+Print the answer or the error. The script's final value is its exit signal for the wrapper.
+
+#+begin_src mlpl :tangle ../agents/run_v0.mlpl
+print("model:", model);
+print("file:", path);
+print("task:", task);
+print("");
+if is_ok(answer) {
+  print(unwrap(answer))
+} else {
+  print("error:", err_message(answer))
+};
+is_ok(answer)
+#+end_src
+
+* Entry: the live loop: =agents/run_loop.mlpl=
+
+The live entry for the bounded loop. Everything configurable arrives as an argument from ~scripts/run-loop~.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/run_loop.mlpl
+# Live entry for the bounded loop: mlpl-repl --source-dir <repo> -f agents/run_loop.mlpl -- HOST MODEL [TASK] [BUDGET] [APPROVE]
+include "loop.mlpl";
+#+end_src
+
+** Top level, part 1
+
+Host, model, task, budget, approval mode, and verify mode, all with defaults.
+
+#+begin_src mlpl :tangle ../agents/run_loop.mlpl
+host = unwrap_or(list_get(args(), 0), "http://localhost:11434");
+model = unwrap_or(list_get(args(), 1), "qwen2.5-coder:7b");
+task = unwrap_or(list_get(args(), 2), "Read examples/tiny-rust-project/src/lib.rs and write tests/scratch/NOTES.md with a one-paragraph description of the crate.");
+budget = unwrap(to_number(unwrap_or(list_get(args(), 3), "8")));
+approve = unwrap_or(list_get(args(), 4), "0");
+verify_mode = unwrap_or(list_get(args(), 5), "always");
+#+end_src
+
+** Top level, part 2
+
+If the wrapper exported the built extension's path, load it and set the module-level root; otherwise say what will be missing. Then build the model, the decision function (approve all, prompt, or refuse), the permission record, and the verifier from the arguments.
+
+#+begin_src mlpl :tangle ../agents/run_loop.mlpl
+library = env("MLPLCODE_AGENT_TOOLS");
+if is_ok(library) {
+  load_extension(unwrap(library));
+  agent_tools_root = unwrap(env("MLPLCODE_ROOT"));
+  print("agent-tools: loaded, root", agent_tools_root)
+} else {
+  print("agent-tools: not loaded (SEARCH and RUN cargo/git unavailable)")
+};
+system = unwrap(read_text("prompts/act.md"));
+ask = call(:u:ask_live, host, model, system);
+decide = if str_eq(approve, "1") {
+  :u:decide_yes
+} else {
+  if str_eq(approve, "prompt") {
+    :u:decide_prompt
+  } else {
+    :u:decide_no
+  }
+};
+permissions = {read: "allow", search: "allow", write: "ask", run: "allow", git: "ask", shell: "deny"};
+verify = if str_eq(verify_mode, "tests") {
+  :u:verify_tests_passed
+} else {
+  :u:verify_always
+};
+#+end_src
+
+** Top level, part 3
+
+Echo the configuration so a transcript is self-describing.
+
+#+begin_src mlpl :tangle ../agents/run_loop.mlpl
+print("model:", model);
+print("task:", task);
+print("budget:", budget, "approve writes:", approve, "verify:", verify_mode);
+#+end_src
+
+** Top level, part 4
+
+The loop is driven step by step here instead of through ~u:run_loop~ so each ~ACTION:~ and ~OBSERVATION:~ prints as it happens. The delta is the slice of history added by the step.
+
+#+begin_src mlpl :tangle ../agents/run_loop.mlpl
+state = u:loop_initial_state(task, budget);
+while state.done == 0 {
+  if state.iteration >= state.budget {
+    state = u:stopped(state, state.iteration, "budget", "")
+  } else {
+    before = str_len(state.history);
+    state = u:loop_step(state, ask, permissions, decide, verify);
+    if state.done == 0 {
+      print(str_slice(state.history, before, str_len(state.history) - before))
+    } else {
+      0
+    }
+  }
+};
+#+end_src
+
+** Top level, part 5
+
+A denial is explained in terms the person can act on.
+
+#+begin_src mlpl :tangle ../agents/run_loop.mlpl
+print("");
+print("stopped after", state.iteration, "step(s):", state.reason);
+if str_eq(state.reason, "denied") {
+  print("the agent's next action was refused:");
+  print(unwrap(list_get(str_split(str_slice(state.answer, 8, str_len(state.answer)), "\n"), 0)));
+  print("answer y at the prompt, or run with LOOP_APPROVE=1 to approve every write")
+} else {
+  print(state.answer)
+};
+state.reason
+#+end_src
+
+* Entry: the replay: =agents/run_replay.mlpl=
+
+The replay entry: the same step-by-step printing as the live entry, but the model is the recorded transcript and writes are pre-approved.
+
+** Module header
+
+#+begin_src mlpl :tangle ../agents/run_replay.mlpl
+# Replay entry: mlpl-repl --source-dir <repo> -f agents/run_replay.mlpl -- TRANSCRIPT [TASK] [BUDGET]
+include "replay_loop.mlpl";
+#+end_src
+
+** Top level, part 1
+
+Transcript path, task text, and budget.
+
+#+begin_src mlpl :tangle ../agents/run_replay.mlpl
+transcript = unwrap_or(list_get(args(), 0), "fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt");
+task = unwrap_or(list_get(args(), 1), "Add u:mul(a, b) to examples/tiny-mlpl-project/lib.mlpl with a test in tests/test_add.mlpl, run the tests, finish when they pass.");
+budget = unwrap(to_number(unwrap_or(list_get(args(), 2), "12")));
+#+end_src
+
+** Top level, part 2
+
+The recorded model and a permission record that allows what the recording did.
+
+#+begin_src mlpl :tangle ../agents/run_replay.mlpl
+ask = u:replay_ask(transcript);
+permissions = {read: "allow", search: "allow", write: "allow", run: "allow", git: "allow", shell: "deny"};
+#+end_src
+
+** Top level, part 3
+
+Announce what is real and what is replayed, so the demo is honest on screen.
+
+#+begin_src mlpl :tangle ../agents/run_replay.mlpl
+print("mlplcode replay: model replies from", transcript);
+print("parser, file writes, and test runs are live");
+print("task:", task);
+#+end_src
+
+** Top level, part 4
+
+Step and print, exactly as the live entry does.
+
+#+begin_src mlpl :tangle ../agents/run_replay.mlpl
+state = u:loop_initial_state(task, budget);
+while state.done == 0 {
+  if state.iteration >= state.budget {
+    state = u:stopped(state, state.iteration, "budget", "")
+  } else {
+    before = str_len(state.history);
+    state = u:loop_step(state, ask, permissions, :u:decide_yes, :u:verify_tests_passed);
+    if state.done == 0 {
+      print(str_slice(state.history, before, str_len(state.history) - before))
+    } else {
+      0
+    }
+  }
+};
+#+end_src
+
+** Top level, part 5
+
+Final summary and stop reason.
+
+#+begin_src mlpl :tangle ../agents/run_replay.mlpl
+print("");
+print("stopped after", state.iteration, "step(s):", state.reason);
+print(state.answer);
+state.reason
+#+end_src
+
+* Where to go next
+
+- ~tests/~ holds the mlplunit suites that pin every function above with a
+  scripted model; ~just tests~ runs them without a model server.
+- ~docs/permissions.md~ is the policy table that ~u:authorize~ implements.
+- ~docs/progression.md~ records what live models actually did, attempt by
+  attempt, and why each guard exists.
+- ~extensions/agent-tools/~ is the Rust side: search and the allow-listed
+  runner, proven by cargo tests and loaded with ~load_extension~.

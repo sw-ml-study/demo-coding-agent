@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+# Regenerate the agent sources from docs/mlplcode.org with org-babel-tangle.
+# Uses EMACS, then emacs on PATH, then the Emacs.app bundle. Installs nothing.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+emacs=${EMACS:-}
+[ -n "$emacs" ] || ! command -v emacs >/dev/null 2>&1 || emacs=emacs
+[ -n "$emacs" ] || [ ! -x /Applications/Emacs.app/Contents/MacOS/Emacs ] || emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
+[ -n "$emacs" ] || { echo "no Emacs found; set EMACS=/path/to/emacs" >&2; exit 1; }
+"$emacs" --batch -l org --eval "(progn (add-to-list 'org-babel-tangle-lang-exts '(\"mlpl\" . \"mlpl\")) (org-babel-tangle-file \"$repo_dir/docs/mlplcode.org\"))" 2>&1 | grep -i "tangled" || true
+"$repo_dir/scripts/check-tangle"

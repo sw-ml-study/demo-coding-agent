@@ -68,6 +68,14 @@ agent-tools:
 rust-demo:
     ./scripts/run-rust-demo
 
+# Prove docs/mlplcode.org reproduces every agent source byte for byte (awk, plus Emacs when present).
+tangle-check:
+    ./scripts/check-tangle
+
+# Regenerate the agent sources from docs/mlplcode.org with org-babel-tangle.
+tangle:
+    ./scripts/tangle
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

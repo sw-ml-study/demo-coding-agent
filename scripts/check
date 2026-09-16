@@ -11,3 +11,4 @@ repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 "$repo_dir/scripts/check-replay"
 "$repo_dir/scripts/check-decide-prompt"
 "$repo_dir/scripts/check-agent-tools"
+"$repo_dir/scripts/check-tangle"
