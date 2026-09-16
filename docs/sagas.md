@@ -58,6 +58,8 @@ to reach the same result on the Rust example.
 ## Future
 
 Planner, builder, and reviewer agents sharing one model with different
-prompts and permission sets. Iteration policy: budgets, compaction, loop
+prompts and permission sets. A literate org-mode document,
+`docs/mlplcode.org`, explaining every MLPL file of the agent with
+executable and tangle-checked source blocks. Iteration policy: budgets, compaction, loop
 detection, retry, cancellation. Finally the OpenCode comparison write-up and
 a `demo-mlpl-libraries` handoff for the domain-neutral agent core.
