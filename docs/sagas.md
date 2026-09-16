@@ -17,7 +17,7 @@ errors are all proven offline; `just v0` and `just loop` ran live against
 qwen2.5-coder:7b; the capability ledger classifies every used builtin with
 evidence and queues eight sw-MLPL findings.
 
-## Active: the agent codes in MLPL, then mechanisms for Rust
+## Completed: the agent codes in MLPL, then mechanisms for Rust
 
 Progress: step 001 added `examples/tiny-mlpl-project` (runs under
 `run_script` with captured PASS events via the vendored mlplunit library)
@@ -50,7 +50,19 @@ demo-extensions `2b2ae48` by git dependency, proven by cargo tests, clippy,
 in: the permission record gained `git` and `shell`, RUN is classified by
 its first word (mlpl stays pure MLPL, cargo under `run`, git under `git`,
 everything else is shell and denied), SEARCH reaches the extension when the
-built library exists, and the policy table is tested row by row.
+built library exists, and the policy table is tested row by row. Step 010
+added PATCH (exact OLD block replaced once, under the write permission and
+read-before-write) and closed the loop on the Rust example: the gate's
+probe drives READ, PATCH, RUN cargo test, verified DONE against the real
+extension and restores the crate; live, devstral-small-2:24b did it in four
+steps and qwen2.5-coder:7b failed on Rust module scoping and stopped at the
+budget with no false DONE.
+
+Accepted: `just check` passes with 84 mlplunit tests, the replay and prompt
+checks, and the extension checks (cargo tests, clippy, sw-checklist, three
+dynamic-load probes); the MLPL example is coded live by three models and
+the Rust example by Devstral Small 2; every OS effect passes through
+`u:authorize`; the README GIF replays a real transcript.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less
@@ -59,11 +71,11 @@ tests pass, recorded as a VHS demo. Then add the Rust `agent-tools`
 extension for ripgrep search, allow-listed `cargo`/`git`, and exact patching
 to reach the same result on the Rust example.
 
-## Future
+## Next: the literate document, then planner, builder, reviewer
 
-Planner, builder, and reviewer agents sharing one model with different
-prompts and permission sets. A literate org-mode document,
-`docs/mlplcode.org`, explaining every MLPL file of the agent with
-executable and tangle-checked source blocks. Iteration policy: budgets, compaction, loop
+First `docs/mlplcode.org`: a literate org-mode explanation of every MLPL
+file of the agent with executable org-babel blocks and a tangle check.
+Then planner, builder, and reviewer agents sharing one model with different
+prompts and permission sets. Iteration policy: budgets, compaction, loop
 detection, retry, cancellation. Finally the OpenCode comparison write-up and
 a `demo-mlpl-libraries` handoff for the domain-neutral agent core.

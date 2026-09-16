@@ -35,6 +35,7 @@ and RUN is classified by its first word:
 | READ                   | `read`   | allow        | `read_text` |
 | SEARCH                 | `search` | allow        | `_agent_tools:search` (ripgrep crates) |
 | WRITE                  | `write`  | ask          | `write_atomic` |
+| PATCH                  | `write`  | ask          | `read_text` + `write_atomic`, OLD must match exactly once |
 | RUN mlpl `<path>`      | `run`    | allow        | `run_script`, pure MLPL |
 | RUN cargo `...`        | `run`    | allow        | `_agent_tools:run`, allow-listed subcommands only |
 | RUN git `...`          | `git`    | ask          | `_agent_tools:run`, `diff` and `status` only |

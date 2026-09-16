@@ -223,4 +223,34 @@ def u:test_loop_repeat_reset() {
   u:assert_eq(str_find(final.history, "REPEATED ACTION"), -1, "never flagged")
 }
 
+@test {name: "PATCH edits a read file in place and needs the file read first", tags: ["loop", "patch"]}
+def u:test_loop_patch() {
+  "A PATCH before READ is refused with guidance; after READ it applies and the file is listed as touched.";
+  path = "tests/scratch/loop-patch.txt";
+  u:assert_ok(write_text(path, "one\ntwo\nthree\n"), "fixture")?;
+  ask = call(:u:ask_transcript, [str_join(["PATCH ", path, "\nOLD\ntwo\nNEW\n2\nEND"], ""), str_concat("READ ", path), str_join(["PATCH ", path, "\nOLD\ntwo\nNEW\n2\nEND"], ""), "DONE ok"]);
+  final = u:run_loop("edit", 6, ask, u:ask_writes(), :u:decide_yes, :u:verify_always);
+  content = unwrap(read_text(path));
+  u:assert_ok(remove_path(path), "cleanup")?;
+  u:assert_true(str_find(final.history, str_concat("read ", str_concat(path, " before writing it"))) > 0, "guard first")?;
+  u:assert_true(str_find(final.history, str_concat("patched ", path)) > 0, "patched after read")?;
+  u:assert_text_eq(content, "one\n2\nthree\n", "content patched")?;
+  u:assert_text_eq(final.reason, "done", "finished")
+}
+
+@test {name: "verify accepts a patched file plus a passing cargo-style run", tags: ["loop", "verify", "patch"]}
+def u:test_verify_patch_and_cargo() {
+  "status: 0 from the extension counts as passing; cargo FAILED output does not.";
+  base = u:loop_initial_state("t", 5);
+  patched = u:advanced(base, "PATCH src/lib.rs\nOLD\na\nNEW\nb\nEND", "patched src/lib.rs", "src/lib.rs");
+  passing = u:advanced(patched, "RUN cargo test", "status: 0\nstdout:\ntest result: ok. 1 passed; 0 failed;\nstderr:\n", "");
+  u:assert_ok(u:verify_tests_passed(passing), "cargo pass")?;
+  failing = u:advanced(patched, "RUN cargo test", "status: 0\nstdout:\ntest result: FAILED. 0 passed; 1 failed;\nstderr:\n", "");
+  u:assert_err(u:verify_tests_passed(failing), "cargo FAILED text")?;
+  nonzero = u:advanced(patched, "RUN cargo test", "status: 101\nstdout:\n\nstderr:\nerror\n", "");
+  u:assert_err(u:verify_tests_passed(nonzero), "non-zero status")?;
+  stale = u:advanced(passing, "PATCH src/lib.rs\nOLD\nb\nNEW\nc\nEND", "patched src/lib.rs", "src/lib.rs");
+  u:assert_err(u:verify_tests_passed(stale), "patch after the passing run")
+}
+
 u:run_registered_tests()

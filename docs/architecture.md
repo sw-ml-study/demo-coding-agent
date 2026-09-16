@@ -105,16 +105,26 @@ WRITE <path>
 <complete file contents>
 END
 RUN <command>
+PATCH <path>
+OLD
+<exact existing lines>
+NEW
+<replacement lines>
+END
 DONE <summary>
 ```
 
 Native tool-calling JSON is deliberately avoided so the mechanism stays
 readable. `agents/protocol.mlpl` turns one reply into `ok({tool: "read",
 path})`, `ok({tool: "search", text})`, `ok({tool: "write", path, body})`,
-`ok({tool: "run", argv})`, `ok({tool: "done", summary})`, or an `err`
+`ok({tool: "run", argv})`, `ok({tool: "patch", path, old, new})`,
+`ok({tool: "done", summary})`, or an `err`
 naming the reason: empty reply, unknown verb, missing END, more than one
 action, empty path, `..` component, absolute path. Verbs are whole words;
-CRLF is normalized; the body keeps its inner newlines. Model habits seen in
+CRLF is normalized; the body keeps its inner newlines. PATCH replaces the
+OLD block, which must occur exactly once, in pure MLPL through `read_text`,
+`str_find`, and `write_atomic`; zero or several occurrences are observations,
+not edits. It is authorized under `write` and subject to read-before-write. Model habits seen in
 live transcripts and now tolerated, each pinned by a test: a fence-only line
 (three backticks, optionally with a language word) directly after
 `WRITE <path>` and directly before `END` is dropped; fences inside the body

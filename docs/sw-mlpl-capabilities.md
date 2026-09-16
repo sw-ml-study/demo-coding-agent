@@ -32,15 +32,25 @@ builtin nor an extension can express it; needs a probe before any request).
 | ask the user a question               | `read_stdin_chunk` via a FIFO forwarder    | measured, awkward | stdin builtins refuse a TTY (F9); `scripts/run-loop` forwards terminal lines through a FIFO |
 | OpenAI-compatible chat endpoint       | none; `llm_call` speaks Ollama `/api/generate` only (`contracts/eval-contract/llm-call.md`) | extension or upstream | planned so any hosted model can drive the loop; an HTTP POST from the `agent-tools` extension is the first candidate, an `llm_call` wire-format option the upstream alternative |
 
-## Upstream status (2026-09-15)
+## Upstream status (2026-09-15, evening)
 
-The sw-mlpl maintainer agent has F1 through F5 captured and queued, not yet
-implemented, and intends to lead a demo-coding-agent fix saga with F2 (the
-misleading unknown-function diagnostic) because it makes every other
-missing-builtin guess self-explanatory. Until then this repository keeps its
-workarounds: `str_concat`/`str_join` for F1, `list_len` for F5, flat file
-layouts for F4, nothing needed for F3. Fixes are being developed in
-parallel; re-measure the affected tests when the adjacent binary changes.
+The sw-mlpl maintainer agent shipped all five first-batch findings in its
+`demo-coding-agent-findings` saga, and the adjacent binary (commit 082ae1db)
+carries them, re-measured here:
+
+| finding | fix | upstream commit | measured |
+|---------|-----|-----------------|----------|
+| F2 unknown-function diagnostic | `error: unknown function: NAME` | c236f3dd | yes |
+| F5 `len` on string lists | polymorphic `len` | c66c24cd | `len(str_split("a b c", " "))` is 3 |
+| F1 `"a" + "b"` | `+` concatenates strings | 4eaa6b60 | `"a" + "b"` is `"ab"` |
+| F4 no parent directories | `make_dir(path)`, sandboxed | 5dfc6d42 | `make_dir` then `write_text` under it succeeds |
+| F3 symlink wording | docs corrected | d92778db | not code |
+
+The agent keeps its existing spellings (`str_concat`, `str_join`,
+`list_len`) because they still work and the tests pin them; new code may
+use `+` and `len`. The only remaining design-noted gap from that batch is a
+single-string length pair (`len_bytes`/`len_chars`), not yet built. F6
+through F9 remain open.
 
 Shipped upstream this session and available if needed, none required by the
 CLI plus `run_script` path this agent uses today: `include` over the wire
@@ -56,7 +66,7 @@ recorded here as they are met, each with: a minimal probe, expected versus
 observed behavior, the affected agent, and an honest "unavailable" status
 until upstream ships a change. Do not work around a bug silently.
 
-### F1. `+` on two strings fails with an array diagnostic (bug, diagnostic)
+### F1. `+` on two strings fails with an array diagnostic (fixed upstream, 4eaa6b60)
 
 Probe: `x = "a" + "b"` gives `error: expected an array value, got a string`.
 Expected: either string concatenation or a message that names strings and
@@ -65,28 +75,28 @@ points at `str_concat`. Affects every agent: prompt building must use
 not run. Suggested improvement: make `+` concatenate strings, or at least
 emit `strings do not support +; use str_concat`.
 
-### F2. Calling an undefined function reports the same array diagnostic (bug)
+### F2. Calling an undefined function reports the same array diagnostic (fixed upstream, c236f3dd)
 
 Probe: `nope_fn("a")` gives `error: expected an array value, got a string`
 instead of an unknown-function error. Cost measured directly: it hid the fact
 that `str_starts_with` and `str_trim` do not exist. Expected: `unknown
 function: nope_fn`. Affects every step that guesses a builtin name.
 
-### F3. Inside-target symlinks are readable despite "never followed" (docs)
+### F3. Inside-target symlinks are readable despite "never followed" (docs fixed upstream, d92778db)
 
 Probe: `tests/fixtures/link-inside -> ../../LICENSE` reads successfully;
 `link-outside -> /etc/hosts` is `err(outside the sandbox)`. The behavior is
 the useful one; the lang-reference wording "symlinks are never followed"
 should say "symlinks that resolve outside the sandbox are refused".
 
-### F4. `write_text` does not create parent directories (awkward)
+### F4. `write_text` does not create parent directories (fixed upstream with `make_dir`, 5dfc6d42)
 
 Probe: `write_text("tests/scratch/no-such-dir/x.txt", "x")` is
 `err(No such file or directory)`. An agent creating a new module in a new
 directory needs a `make_dir` builtin or a documented `write_text` option.
 Suggested improvement: add `make_dir(path)` (sandboxed, `ok(1)`/`err`).
 
-### F5. `len` rejects string lists (awkward)
+### F5. `len` rejects string lists (fixed upstream, c66c24cd)
 
 Probe: `len(str_split("a b", " "))` is an error; `list_len` is required.
 Expected by an array-language reader: `len` is total over lists. Minor;

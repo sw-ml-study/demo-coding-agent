@@ -38,10 +38,14 @@ def u:authorize(action, permissions) {
       if str_eq(action.tool, "write") {
         permissions.write
       } else {
-        if str_eq(action.tool, "run") {
-          u:authorize_run(action.argv, permissions)
+        if str_eq(action.tool, "patch") {
+          permissions.write
         } else {
-          "allow"
+          if str_eq(action.tool, "run") {
+            u:authorize_run(action.argv, permissions)
+          } else {
+            "allow"
+          }
         }
       }
     }
@@ -76,13 +80,17 @@ def u:execute(action) {
     if str_eq(action.tool, "write") {
       u:observe_result(write_atomic(action.path, action.body), str_concat("wrote ", action.path))
     } else {
-      if str_eq(action.tool, "search") {
-        u:search_tool(action.text)
+      if str_eq(action.tool, "patch") {
+        u:apply_patch(action.path, action.old, action.new)
       } else {
-        if str_eq(action.tool, "run") {
-          u:run_tool(action.argv)
+        if str_eq(action.tool, "search") {
+          u:search_tool(action.text)
         } else {
-          "no-op"
+          if str_eq(action.tool, "run") {
+            u:run_tool(action.argv)
+          } else {
+            "no-op"
+          }
         }
       }
     }
@@ -97,7 +105,11 @@ def u:touched_path(action) {
     if str_eq(action.tool, "write") {
       action.path
     } else {
-      ""
+      if str_eq(action.tool, "patch") {
+        action.path
+      } else {
+        ""
+      }
     }
   }
 }
@@ -146,20 +158,59 @@ def u:verify_always(state) {
   ok(1)
 }
 
+def u:last_edit_index(history) {
+  "Character index of the last WRITE or PATCH action in history, or -1.";
+  write_at = u:last_index(history, "\nACTION:\nWRITE ");
+  patch_at = u:last_index(history, "\nACTION:\nPATCH ");
+  if write_at > patch_at {
+    write_at
+  } else {
+    patch_at
+  }
+}
+
+def u:last_passing_run(history) {
+  "Character index of the last RUN observation that reported status ok (mlpl) or status 0 (extension), or -1.";
+  ok_at = u:last_index(history, "\nOBSERVATION:\nstatus: ok");
+  zero_at = u:last_index(history, "\nOBSERVATION:\nstatus: 0\n");
+  if ok_at > zero_at {
+    ok_at
+  } else {
+    zero_at
+  }
+}
+
+def u:run_reported_failure(tail) {
+  "1 when the text after a passing status still names a failed test (mlpl failed: lines or cargo FAILED).";
+  if str_find(tail, "failed: ") >= 0 {
+    1
+  } else {
+    if str_find(tail, "FAILED") >= 0 {
+      1
+    } else {
+      0
+    }
+  }
+}
+
 def u:verify_tests_passed(state) {
-  "Accept DONE only after at least one successful WRITE and a RUN with status: ok and no failed test after the last WRITE.";
-  last_write = u:last_index(state.history, "\nACTION:\nWRITE ");
-  last_ok = u:last_index(state.history, "\nOBSERVATION:\nstatus: ok");
-  if str_find(state.history, "\nOBSERVATION:\nwrote ") < 0 {
+  "Accept DONE only after at least one successful WRITE or PATCH and a passing RUN after the last edit with no failed test.";
+  edited = if str_find(state.history, "\nOBSERVATION:\nwrote ") >= 0 {
+    1
+  } else {
+    str_find(state.history, "\nOBSERVATION:\npatched ") >= 0
+  };
+  last_ok = u:last_passing_run(state.history);
+  if edited == 0 {
     err("no file has been written yet")
   } else {
     if last_ok < 0 {
       err("no RUN observation with status: ok yet")
     } else {
-      if last_ok < last_write {
+      if last_ok < u:last_edit_index(state.history) {
         err("files changed after the last passing RUN; run the tests again")
       } else {
-        if str_find(str_slice(state.history, last_ok, str_len(state.history) - last_ok), "failed: ") >= 0 {
+        if u:run_reported_failure(str_slice(state.history, last_ok, str_len(state.history) - last_ok)) {
           err("the last RUN reported a failed test")
         } else {
           ok(1)
@@ -192,8 +243,13 @@ def u:was_read(state, path) {
 }
 
 def u:unread_write(state, action) {
-  "1 when the action writes an existing file that this run has not read: the model is editing blind.";
-  if str_eq(action.tool, "write") {
+  "1 when the action writes or patches an existing file that this run has not read: the model is editing blind.";
+  edits = if str_eq(action.tool, "write") {
+    1
+  } else {
+    str_eq(action.tool, "patch")
+  };
+  if edits {
     if u:was_read(state, action.path) {
       0
     } else {

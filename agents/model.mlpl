@@ -20,13 +20,17 @@ def u:describe_action(action) {
   if str_eq(action.tool, "write") {
     str_join(["WRITE ", action.path, "\n", action.body, "END"], "")
   } else {
-    if str_eq(action.tool, "run") {
-      str_concat("RUN ", str_join(action.argv, " "))
+    if str_eq(action.tool, "patch") {
+      str_join(["PATCH ", action.path, "\nOLD\n", action.old, "NEW\n", action.new, "END"], "")
     } else {
-      if str_eq(action.tool, "search") {
-        str_concat("SEARCH ", action.text)
+      if str_eq(action.tool, "run") {
+        str_concat("RUN ", str_join(action.argv, " "))
       } else {
-        str_concat("READ ", action.path)
+        if str_eq(action.tool, "search") {
+          str_concat("SEARCH ", action.text)
+        } else {
+          str_concat("READ ", action.path)
+        }
       }
     }
   }

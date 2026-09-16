@@ -135,6 +135,27 @@ def u:test_parse_leading_action_header() {
   u:assert_err(u:parse_action("ACTION:"), "header alone is empty")
 }
 
+@test {name: "PATCH parses path, OLD block, and NEW block up to END", tags: ["protocol", "patch"]}
+def u:test_parse_patch() {
+  "PATCH <path> / OLD / lines / NEW / lines / END becomes {tool: patch, path, old, new}; blocks keep inner newlines.";
+  a = unwrap(u:parse_action("PATCH src/lib.rs\nOLD\n    left + right\n}\nNEW\n    left + right\n}\n\n#[cfg(test)]\nmod tests {}\nEND"));
+  u:assert_text_eq(a.tool, "patch", "tool")?;
+  u:assert_text_eq(a.path, "src/lib.rs", "path")?;
+  u:assert_text_eq(a.old, "    left + right\n}\n", "old block")?;
+  u:assert_text_eq(a.new, "    left + right\n}\n\n#[cfg(test)]\nmod tests {}\n", "new block")
+}
+
+@test {name: "PATCH rejects missing markers and an empty OLD block", tags: ["protocol", "patch", "reject"]}
+def u:test_reject_patch_shapes() {
+  "OLD, NEW, and END are all required, OLD must not be empty, and the path rules still apply.";
+  u:assert_err(u:parse_action("PATCH a.rs\nx\nNEW\ny\nEND"), "missing OLD")?;
+  u:assert_err(u:parse_action("PATCH a.rs\nOLD\nx\nEND"), "missing NEW")?;
+  u:assert_err(u:parse_action("PATCH a.rs\nOLD\nx\nNEW\ny"), "missing END")?;
+  u:assert_err(u:parse_action("PATCH a.rs\nOLD\nNEW\ny\nEND"), "empty OLD")?;
+  u:assert_err(u:parse_action("PATCH ../a.rs\nOLD\nx\nNEW\ny\nEND"), "traversal")?;
+  u:assert_err(u:parse_action("PATCH a.rs\nOLD\nx\nNEW\ny\nEND\nDONE x"), "action after END")
+}
+
 @test {name: "empty reply is rejected", tags: ["protocol", "reject"]}
 def u:test_reject_empty() {
   "An empty or whitespace-only reply is err naming empty reply.";

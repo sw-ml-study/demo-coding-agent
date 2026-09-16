@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+# Opt-in live demo on the Rust example: the agent adds a unit test for add
+# with PATCH, runs cargo test through the extension, and finishes when it
+# passes. Needs the built extension (just agent-tools) and a model server.
+# Transcript goes to out/transcripts/; SAVE_FIXTURE=1 replaces the committed
+# fixture after a run that finished with done. The crate is restored
+# afterwards, including on Ctrl-C.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+model=${OLLAMA_MODEL:-qwen2.5-coder:7b}
+slug=$(printf '%s' "$model" | tr ':/' '--')
+stamp=$(date +%Y%m%dT%H%M%S)
+out=$repo_dir/out/transcripts/rust-add-test-$slug-$stamp.txt
+fixture=$repo_dir/fixtures/transcripts/rust-add-test-$slug.txt
+suffix=so
+[ "$(uname -s)" = Darwin ] && suffix=dylib
+[ -f "$repo_dir/target/debug/libmlpl_extension_agent_tools.$suffix" ] || {
+    echo "build the extension first: just agent-tools" >&2; exit 1; }
+task="Add a unit test for the add function in examples/tiny-rust-project/src/lib.rs. Read the file, then use PATCH to append a #[cfg(test)] mod tests with one #[test] that asserts add(2, 3) == 5, keeping every existing line. Then run: RUN cargo test --manifest-path examples/tiny-rust-project/Cargo.toml. Reply DONE only after the run observation shows status: 0 and test result: ok."
+
+restore() {
+    git -C "$repo_dir" checkout -q -- examples/tiny-rust-project
+    git -C "$repo_dir" clean -fdq -- examples/tiny-rust-project
+    echo "restored examples/tiny-rust-project"
+}
+trap restore EXIT INT TERM
+
+mkdir -p "$repo_dir/out/transcripts"
+status=0
+LOOP_TASK="$task" LOOP_BUDGET="${LOOP_BUDGET:-12}" LOOP_APPROVE=1 LOOP_VERIFY=tests \
+    "$repo_dir/scripts/run-loop" 2>&1 | tee "$out" || status=$?
+
+echo "transcript: ${out#"$repo_dir/"}"
+if [ "${SAVE_FIXTURE:-0}" = 1 ] && grep -q "^stopped after .*: done$" "$out"; then
+    cp "$out" "$fixture"
+    echo "fixture updated: ${fixture#"$repo_dir/"}"
+fi
+exit "$status"

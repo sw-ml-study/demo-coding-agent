@@ -43,3 +43,13 @@ for needle in "match(es)" "examples/tiny-mlpl-project/lib.mlpl:3:def u:add(a, b)
         printf '%s\n' "$output" >&2; echo "agent-tools loop probe missing: $needle" >&2; exit 1; }
 done
 echo "agent-tools: loop routes SEARCH and RUN git through the extension and refuses cargo nope"
+
+# Close the loop on the Rust example through the real loop: PATCH adds a
+# unit test, RUN cargo test passes via the extension, DONE is verified, and
+# the example crate is restored.
+output=$("$mlpl" --source-dir "$repo_dir" -f "$repo_dir/probes/rust_close_loop_probe.mlpl" -- "$library" "$repo_dir")
+for needle in "patched examples/tiny-rust-project/src/lib.rs" "status: 0" "test result: ok. 1 passed" "reason: done" "patched had test: 1" "restored: 1"; do
+    printf '%s\n' "$output" | grep -qF "$needle" || {
+        printf '%s\n' "$output" >&2; echo "rust close-loop probe missing: $needle" >&2; exit 1; }
+done
+echo "agent-tools: PATCH plus RUN cargo test closes the loop on the Rust example"

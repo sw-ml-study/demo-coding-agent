@@ -72,4 +72,18 @@ def u:test_render_event() {
   u:assert_text_eq(u:render_event("{\"kind\":\"test_end\",\"name\":\"x\",\"status\":\"failed\",\"diagnostic\":\"boom\"}"), "failed: x -- boom", "failed")
 }
 
+@test {name: "apply_patch replaces exactly one occurrence and reports mismatches", tags: ["patch"]}
+def u:test_apply_patch() {
+  "Exact single match is replaced atomically; zero or multiple matches and missing files are observations.";
+  path = "tests/scratch/patch-probe.txt";
+  u:assert_ok(write_text(path, "alpha\nbeta\ngamma\n"), "fixture")?;
+  u:assert_text_eq(u:apply_patch(path, "beta\n", "beta\ndelta\n"), "patched tests/scratch/patch-probe.txt", "patched")?;
+  u:assert_text_eq(unwrap(read_text(path)), "alpha\nbeta\ndelta\ngamma\n", "content")?;
+  u:assert_eq(str_find(u:apply_patch(path, "zeta\n", "x"), "PATCH ERROR: the OLD block occurs 0 time(s)"), 0, "not found")?;
+  u:assert_eq(str_find(u:apply_patch(path, "a", "x"), "PATCH ERROR: the OLD block occurs "), 0, "ambiguous")?;
+  u:assert_text_eq(unwrap(read_text(path)), "alpha\nbeta\ndelta\ngamma\n", "untouched after errors")?;
+  u:assert_eq(str_find(u:apply_patch("tests/scratch/nope.txt", "a", "b"), "ERROR: read_text:"), 0, "missing file")?;
+  u:assert_ok(remove_path(path), "cleanup")
+}
+
 u:run_registered_tests()

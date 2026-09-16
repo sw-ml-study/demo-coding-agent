@@ -58,14 +58,37 @@ failure and the verifier is what makes the demo honest.
 | model | size | steps | outcome | wasted or repaired steps | wall |
 |-------|------|-------|---------|--------------------------|------|
 | qwen2.5-coder:7b | 4.7 GB | 7 | verified done, both tests pass | one SEARCH placeholder | ~90 s |
-| devstral:24b, before the header tolerance | 14 GB | 9 | verified done, both tests pass | two parse errors from a copied `ACTION:` header, one RUN before the test was written, then a correct write and rerun | 68 s |
-| devstral:24b, after | 14 GB | 6 | verified done, both tests pass | none | 32 s |
+| `devstral:24b` (Devstral Small 1.x, 23.6B, Q4_K_M), before the header tolerance | 14 GB | 9 | verified done, both tests pass | two parse errors from a copied `ACTION:` header, one RUN before the test was written, then a correct write and rerun | 68 s |
+| `devstral:24b` (Devstral Small 1.x), after | 14 GB | 6 | verified done, both tests pass | none | 32 s |
+| `devstral-small-2:24b` (Devstral Small 2, 24B mistral3, Q4_K_M) | 15 GB | 6 | verified done, both tests pass | none; chose PATCH for the library edit unprompted | 70 s incl. 21 s model load |
 
 Devstral read before writing without being told twice, reran the tests
 after its second write, and made no syntax slips in the MLPL it wrote. Its
 only habit was echoing the transcript's `ACTION:` header; once the parser
 dropped it, the run was the minimum six steps with no wasted step. It is
 the upgrade tier: it needs about 14 GB, so it does not fit the 12 GB floor.
+Note the tags: Ollama's `devstral:24b` is the first-generation Devstral
+Small (its built-in system prompt names the OpenHands scaffold);
+Devstral 2 is `devstral-small-2:24b`. Both did the minimum six steps; the
+second generation was the first model to reach for PATCH instead of
+rewriting the whole library file.
+
+## The Rust target
+
+`just rust-demo`: read `src/lib.rs`, PATCH in a `#[cfg(test)]` module, RUN
+`cargo test --manifest-path ...` through the extension, DONE when it passes.
+Same prompt, same guards, 2026-09-15:
+
+| model | steps | outcome | what happened | wall |
+|-------|-------|---------|---------------|------|
+| qwen2.5-coder:7b | 12 (budget) | not done | its test module omitted `use super::add`, so `cargo test` failed with E0425; it then re-sent PATCH blocks whose OLD text no longer matched the changed file, re-read, re-ran, and repeated until the budget ended | 26 s |
+| devstral-small-2:24b, first run | 7 | verified done, 1 test passed | the demo's restore had reverted an uncommitted fixture fix, so the first `cargo test` failed with cargo's workspace error; the model read `Cargo.toml`, added the empty `[workspace]` table cargo suggested, reran, and passed. A correct self-repair of an environment fault that was ours | 70 s incl. 23 s load |
+| devstral-small-2:24b, fixture fixed | 4 | verified done, 1 test passed | read, PATCH with `use super::*`, run, done; the minimum | 27 s |
+
+PATCH did what it was added for: the 7B and the 24B both edited a region
+instead of rewriting the file, and the rest of `lib.rs` stayed byte-identical.
+The 7B's failure is a Rust knowledge gap (module scoping), not a protocol
+slip; the loop's guards stopped the thrash at the budget with no false DONE.
 
 ## Demo recording
 

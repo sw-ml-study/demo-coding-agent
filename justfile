@@ -64,6 +64,10 @@ replay-check:
 agent-tools:
     ./scripts/check-agent-tools
 
+# Opt-in live demo on the Rust example: PATCH in a unit test, RUN cargo test via the extension.
+rust-demo:
+    ./scripts/run-rust-demo
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

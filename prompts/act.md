@@ -12,7 +12,15 @@ WRITE <path>
 <the complete file contents, raw text, no ``` fences>
 END
 
+PATCH <path>
+OLD
+<a few existing lines, copied exactly>
+NEW
+<the lines that replace them>
+END
+
 RUN mlpl <path>
+RUN cargo test --manifest-path <path to Cargo.toml>
 
 DONE <one-line summary>
 
@@ -25,7 +33,9 @@ WRITE <path>
 END
 
 Rules:
-- Only WRITE ends with END. READ, SEARCH, RUN, and DONE are a single line.
+- WRITE and PATCH end with END. READ, SEARCH, RUN, and DONE are a single line.
+- Prefer PATCH for a small change to a file you have read: the OLD block must
+  match the file exactly once. Use WRITE only for new files or rewrites.
 - Paths are relative to the project root; never use .. or a leading /.
 - Never write OBSERVATION, ERROR, or a result yourself; stop after your
   action and wait for the system.

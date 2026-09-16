@@ -55,6 +55,7 @@ the mechanism stays visible:
 READ <path>
 SEARCH <text>
 WRITE <path> ... END
+PATCH <path> OLD ... NEW ... END
 RUN <command>
 DONE <summary>
 ```
@@ -108,7 +109,9 @@ prints how long that took, allowing up to five minutes for a cold start, so
 the first real `llm_call` never pays it; each call is then bounded by
 `llm_call`'s own 120-second timeout. On smaller machines `qwen2.5-coder:1.5b` runs anywhere but drifts
 out of the protocol more often. Bigger cards can point the same variable at
-a larger model; `devstral:24b` (14 GB) completed the demo task with no
+a larger model; `devstral:24b` (Devstral Small 1.x, 14 GB) and
+`devstral-small-2:24b` (15 GB) each completed the demo task in the minimum
+six steps with no
 syntax slips and is the recommended upgrade tier. `just check` never contacts a model server, so a fork
 without a GPU still gets a green gate.
 
@@ -225,10 +228,24 @@ without evidence is told `NOT VERIFIED` and keeps working. The six live
 attempts it took to get here, and what each one changed, are in
 [progression](docs/progression.md).
 
+## The Rust target
+
+```sh
+just agent-tools   # build and prove the extension once
+just rust-demo     # PATCH a unit test into examples/tiny-rust-project, RUN cargo test
+```
+
+With the extension built, the same loop works a Rust crate: it reads
+`src/lib.rs`, appends a `#[cfg(test)]` module with PATCH so the rest of the
+file is untouched, runs `cargo test` through the allow-listed runner, and
+finishes only when the observation shows `status: 0` and `test result: ok`.
+`just check` proves that flow with a scripted transcript against the real
+extension and restores the crate.
+
 ## Tests and probes
 
 ```sh
-just tests        # 73 native mlplunit tests, no model server needed
+just tests        # 84 native mlplunit tests, no model server needed
 just replay-check # the committed transcript replays to a verified done
 just llm-probe    # opt-in: one llm_call round trip against local Ollama
 ```

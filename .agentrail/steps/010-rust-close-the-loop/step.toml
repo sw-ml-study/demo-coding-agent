@@ -1,6 +1,6 @@
 number = 10
 slug = "rust-close-the-loop"
-status = "pending"
+status = "in-progress"
 description = "Close the loop on the Rust target: the agent adds a unit test for add to exam..."
 role = "production"
 context_files = []

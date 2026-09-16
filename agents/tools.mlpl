@@ -179,3 +179,21 @@ def u:run_tool(argv) {
     } else { u:run_native(argv) }
   }
 }
+
+def u:apply_patch(path, old, new) {
+  "Replace exactly one occurrence of old with new in path via write_atomic; the observation names any mismatch.";
+  current = read_text(path);
+  if is_err(current) {
+    str_concat("ERROR: ", err_message(current))
+  } else {
+    text = unwrap(current);
+    hits = u:count_occurrences(text, old);
+    if hits != 1 {
+      str_join(["PATCH ERROR: the OLD block occurs ", to_string(hits), " time(s) in ", path, "; it must occur exactly once"], "")
+    } else {
+      at = str_find(text, old);
+      updated = str_join([str_slice(text, 0, at), new, str_slice(text, at + str_len(old), str_len(text))], "");
+      u:observe_result(write_atomic(path, updated), str_concat("patched ", path))
+    }
+  }
+}

@@ -1,0 +1,23 @@
+# Prove the Rust close-the-loop flow with the extension loaded: READ, PATCH in a test, RUN cargo test, verified DONE; then restore.
+include "../agents/loop.mlpl";
+
+load_extension(unwrap(list_get(args(), 0)));
+agent_tools_root = unwrap(list_get(args(), 1));
+
+lib = "examples/tiny-rust-project/src/lib.rs";
+original = unwrap(read_text(lib));
+patch = str_join(["PATCH ", lib, "\nOLD\n    left + right\n}\nNEW\n    left + right\n}\n\n#[cfg(test)]\nmod tests {\n    use super::add;\n\n    #[test]\n    fn adds_two_integers() {\n        assert_eq!(add(2, 3), 5);\n        assert_eq!(add(-1, 1), 0);\n    }\n}\nEND"], "");
+ask = call(:u:ask_transcript, [str_concat("READ ", lib), patch, "RUN cargo test --manifest-path examples/tiny-rust-project/Cargo.toml", "DONE added a unit test for add; cargo test passes"]);
+permissions = {read: "allow", search: "allow", write: "allow", run: "allow", git: "allow", shell: "deny"};
+final = u:run_loop("add a unit test for add", 8, ask, permissions, :u:decide_yes, :u:verify_tests_passed);
+patched = unwrap(read_text(lib));
+write_atomic(lib, original);
+print(final.history);
+print("reason:", final.reason);
+print("patched had test:", if str_find(patched, "fn adds_two_integers") >= 0 {
+    1
+  } else {
+    0
+  });
+print("restored:", str_eq(unwrap(read_text(lib)), original));
+final.reason
