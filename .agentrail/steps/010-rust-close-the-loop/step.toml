@@ -1,9 +1,10 @@
 number = 10
 slug = "rust-close-the-loop"
-status = "in-progress"
+status = "completed"
 description = "Close the loop on the Rust target: the agent adds a unit test for add to exam..."
 role = "production"
 context_files = []
 created_at = "2026-09-15T11:58:25"
+completed_at = "2026-09-15T20:09:50"
 task_type = "mlpl-agent"
-commits = []
+commits = ["358f9f577897d5f75113fbbffe1143ddd57db1c2"]
