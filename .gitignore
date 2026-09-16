@@ -9,6 +9,8 @@
 
 # Generated agent transcripts, scratch workspaces, and local tool output.
 /out/
+# Scratch for scripts (tangle checks, FIFOs, replay output) and for org-babel; never /tmp.
+/work/
 /tmp/
 *.tmp
 /tests/scratch/*

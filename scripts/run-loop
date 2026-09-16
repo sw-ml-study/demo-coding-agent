@@ -32,7 +32,9 @@ fi
 
 # sw-MLPL's stdin builtins refuse a terminal (ledger F9), so feed the agent
 # from a FIFO that a forwarder fills with the lines typed at the terminal.
-fifo=$(mktemp -u)
+mkdir -p "$repo_dir/work"
+fifo=$repo_dir/work/approve.$$.fifo
+rm -f "$fifo"
 mkfifo "$fifo"
 cat /dev/tty > "$fifo" &
 forwarder=$!

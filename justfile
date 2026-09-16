@@ -80,6 +80,10 @@ tangle:
 publish-doc:
     ./scripts/publish-doc
 
+# Same, but evaluate the runnable primer blocks first so their results are embedded.
+publish-doc-evaluated:
+    PUBLISH_EVAL=1 ./scripts/publish-doc
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

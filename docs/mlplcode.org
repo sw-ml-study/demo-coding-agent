@@ -27,13 +27,20 @@ has a minimal PATH, so the full path matters):
 
 #+begin_src emacs-lisp :tangle no
 (let* ((here (file-name-directory (buffer-file-name)))
-       (sw-mlpl (expand-file-name "../../sw-mlpl" here))
+       ;; The repository root is wherever AGENTS.md is, so this also works
+       ;; on a copy of the document under out/ or work/.
+       (repo (or (locate-dominating-file here "AGENTS.md") (expand-file-name ".." here)))
+       (sw-mlpl (expand-file-name "../sw-mlpl" repo))
        (candidates (list (expand-file-name "target/release/mlpl-repl" sw-mlpl)
                          (expand-file-name "target/debug/mlpl-repl" sw-mlpl)
                          (executable-find "mlpl-repl")
                          (expand-file-name "~/.local/softwarewrighter/bin/mlpl-repl"))))
   (add-to-list 'load-path (expand-file-name "elisp" sw-mlpl))
   (require 'ob-mlpl)
+  ;; Keep org-babel's scratch files inside the repository's ignored work/
+  ;; directory rather than /tmp.
+  (make-directory (expand-file-name "work" repo) t)
+  (setq temporary-file-directory (expand-file-name "work/" repo))
   (setq org-babel-mlpl-command
         (or (seq-find (lambda (p) (and p (file-executable-p p))) candidates)
             (user-error "no mlpl-repl found; build ../sw-mlpl or set org-babel-mlpl-command")))
@@ -47,7 +54,7 @@ Three things to know before pressing =C-c C-c= on a block:
   says ~include "model.mlpl"~ cannot find its neighbour and will report an
   include error. The function blocks in this document are for reading and
   tangling; the runnable ones are the small self-contained examples in the
-  primer below, marked ~:eval query~.
+  primer below.
 - ~org-confirm-babel-evaluate~ controls the yes/no prompt. The setup block
   sets it to ~nil~ (never ask) for the session; set it back to ~t~ to be
   asked, or to a function to decide per block.
@@ -109,7 +116,7 @@ The language is small and the agent uses a small part of it.
 
 These three blocks are self-contained and safe to evaluate.
 
-#+begin_src mlpl :tangle no :eval query :exports both
+#+begin_src mlpl :tangle no :exports both
 def u:half(n) {
   "Half of a non-negative number, or an err naming the problem.";
   if n < 0 { err("negative: " + to_string(n)) } else { ok(n / 2) }
@@ -128,7 +135,7 @@ print(unwrap_or(u:quarter(-4), -1))
 
 ** Try it: records and partials
 
-#+begin_src mlpl :tangle no :eval query :exports both
+#+begin_src mlpl :tangle no :exports both
 def u:greet(greeting, name) {
   "Two-argument function; binding the first with call() makes a one-argument partial.";
   greeting + ", " + name
@@ -146,7 +153,7 @@ print(type_of(hello))
 Note the four words from ~"cargo  test --lib"~: the double space yields an
 empty word, which is exactly what the parser's ~u:split_words~ removes.
 
-#+begin_src mlpl :tangle no :eval query :exports both
+#+begin_src mlpl :tangle no :exports both
 line = "READ   src/lib.mlpl  ";
 verb_end = str_find(line, " ");
 print(str_slice(line, 0, verb_end));

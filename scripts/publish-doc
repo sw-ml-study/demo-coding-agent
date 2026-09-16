@@ -17,6 +17,23 @@ emacs=${EMACS:-}
 [ -n "$emacs" ] || [ ! -x /Applications/Emacs.app/Contents/MacOS/Emacs ] || emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
 [ -n "$emacs" ] || { echo "no Emacs found; set EMACS=/path/to/emacs" >&2; exit 1; }
 
+# PUBLISH_EVAL=1 evaluates the runnable primer blocks (those marked
+# :eval query) with sw-MLPL before exporting, so their #+RESULTS appear in
+# the output. Everything else stays unevaluated.
+if [ "${PUBLISH_EVAL:-0}" = 1 ]; then
+    mlpl=$("$repo_dir/scripts/select-mlpl")
+    mkdir -p "$repo_dir/work"
+    "$emacs" --batch -l org \
+        --eval "(add-to-list 'load-path \"$repo_dir/../sw-mlpl/elisp\")" \
+        --eval "(require 'ob-mlpl)" \
+        --eval "(setq org-babel-mlpl-command \"$mlpl\" org-confirm-babel-evaluate nil temporary-file-directory \"$repo_dir/work/\")" \
+        --eval "(find-file \"$out/mlplcode.org\")" \
+        --eval "(org-babel-execute-buffer)" \
+        --eval "(save-buffer)" 2>&1 | grep -v "^Loading\|^Wrote\|^Executing\|^Code block" || true
+    rm -rf "$repo_dir"/work/mlpl-ob-*
+    echo "publish: evaluated the runnable blocks; results embedded"
+fi
+
 export_with() {
     "$emacs" --batch -l org -l ox-md -l ox-ascii \
         --eval "(setq org-confirm-babel-evaluate (lambda (lang body) (error \"publish: a %s block asked to evaluate; the document must not evaluate on export\" lang)))" \
@@ -40,5 +57,5 @@ else
     echo "publish: no Chrome found for PDF (set CHROME=/path/to/chrome); HTML, text, and Markdown written" >&2
 fi
 
-rm -f "$out/mlplcode.org"
+rm -f "$out/mlplcode.org" "$out/mlplcode.org~"
 ls -la "$out"

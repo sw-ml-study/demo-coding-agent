@@ -7,7 +7,8 @@ repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 mlpl=$("$repo_dir/scripts/select-mlpl")
 transcript=${REPLAY_TRANSCRIPT:-fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt}
 delay=${REPLAY_DELAY:-0.06}
-out=$(mktemp)
+mkdir -p "$repo_dir/work"
+out=$repo_dir/work/replay.$$.txt
 
 status=0
 "$mlpl" --source-dir "$repo_dir" -f "$repo_dir/agents/run_replay.mlpl" -- "$transcript" > "$out" 2>&1 || status=$?
