@@ -60,6 +60,38 @@ RUN <command>
 DONE <summary>
 ```
 
+## How the loop works
+
+One step per model turn, over a single state record: the task, the
+transcript so far, the files touched, and the budget.
+
+1. **Build the prompt.** The task, then every earlier `ACTION:` and
+   `OBSERVATION:` pair, then "Choose the next action."
+2. **Ask the model.** The model is a function passed in. Live, it is
+   `llm_call` against Ollama; under test, a scripted reply.
+3. **Parse the reply** into exactly one action: `READ path`,
+   `SEARCH text`, `WRITE path ... END`, `PATCH path OLD ... NEW ... END`,
+   `RUN command`, or `DONE summary`. Anything else becomes a
+   `PARSE ERROR` observation and the turn ends.
+4. **Guard.** A reply identical to the last one is flagged, and stops the
+   run as `stuck` the third time. A write or patch to a file this run has
+   not read is refused with "read it first".
+5. **Authorize.** Look the tool up in the permission record and get
+   `allow`, `ask`, or `deny`. `ask` goes to a decision function: a
+   terminal prompt, always yes, or always no. `deny` ends the run.
+6. **Execute.** Read, atomic write, exact-match patch, `run_script` for
+   an MLPL test file, or the Rust extension for ripgrep search and
+   allow-listed `cargo`/`git`. Never a shell. A failure is an `ERROR`
+   observation, not a crash.
+7. **Record.** Append the action and its observation to the transcript,
+   note the touched file, count the repeat.
+8. **On `DONE`, verify.** Accept only if a file was edited and a test run
+   passed after the last edit; otherwise the model sees `NOT VERIFIED`
+   and keeps going.
+
+The run stops with a reason as a value: `done`, `denied`, `budget`, or
+`stuck`. Everything above is MLPL in `agents/loop.mlpl`, about 340 lines.
+
 ## Planned progression
 
 | version | shape                               |
