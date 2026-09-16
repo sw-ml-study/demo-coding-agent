@@ -3,7 +3,9 @@
 <img src="assets/mlplcode-logo.png" alt="mlplcode badge: Software Wrighter" width="160" align="right">
 
 A coding agent small enough to understand, written in sw-MLPL. The tool is
-named **mlplcode**, in the spirit of OpenCode.
+named **mlplcode**, in the spirit of OpenCode. The story of building it is
+the blog post
+[A coding agent in MLPL](https://blog.softwarewrighter.com/2026/09/16/ai-tools-coding-agent-in-mlpl/).
 
 [sw-MLPL](https://github.com/sw-ml-study/sw-mlpl) is a small array/functional
 language for machine-learning study: whole-array arithmetic, records, function
