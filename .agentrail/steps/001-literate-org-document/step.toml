@@ -1,0 +1,9 @@
+number = 1
+slug = "literate-org-document"
+status = "in-progress"
+description = "Write docs/mlplcode.org, a literate-programming explanation of every MLPL fil..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:09:53"
+task_type = "documentation"
+commits = []

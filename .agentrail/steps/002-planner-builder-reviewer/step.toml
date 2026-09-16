@@ -1,0 +1,9 @@
+number = 2
+slug = "planner-builder-reviewer"
+status = "pending"
+description = "Split the loop into three agents sharing one model: u:planner (read and searc..."
+role = "production"
+context_files = []
+created_at = "2026-09-15T20:09:53"
+task_type = "mlpl-agent"
+commits = []
