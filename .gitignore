@@ -31,3 +31,6 @@
 
 # Temporary local preview page.
 /animations/
+
+# Org export artifacts (C-c C-e h o); the .org file is the source.
+/docs/*.html

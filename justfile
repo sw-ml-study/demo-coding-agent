@@ -76,6 +76,10 @@ tangle-check:
 tangle:
     ./scripts/tangle
 
+# Publish docs/mlplcode.org to out/docs as HTML, text, Markdown, and PDF (Chrome headless); evaluates nothing.
+publish-doc:
+    ./scripts/publish-doc
+
 # Run the complete precommit gate.
 check:
     ./scripts/check

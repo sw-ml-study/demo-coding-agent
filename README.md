@@ -140,7 +140,8 @@ suites. Rust crates, once present, add `sw-checklist` and scoped
 Read the agent itself as a book: [`docs/mlplcode.org`](docs/mlplcode.org)
 explains every MLPL file function by function, with each function in an
 org-babel block that tangles back to the committed source; `just check`
-proves the two never drift. Then read the
+proves the two never drift; `just publish-doc` exports it to HTML, text,
+Markdown, and PDF without evaluating anything. Then read the
 [architecture](docs/architecture.md), [delivery plan](docs/plan.md),
 [saga queue](docs/sagas.md), [permissions](docs/permissions.md), and
 [capability ledger](docs/sw-mlpl-capabilities.md) before implementing an

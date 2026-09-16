@@ -2,7 +2,9 @@
 #+subtitle: a literate reading of every MLPL file in the agent
 #+author: Michael A Wright
 #+startup: showall
-#+property: header-args:mlpl :results output :exports both
+#+property: header-args:mlpl :results output :exports code :eval no-export
+#+property: header-args:text :eval never
+#+property: header-args:emacs-lisp :eval no-export
 #+options: toc:2 num:t
 
 * How to read and run this document
@@ -14,21 +16,56 @@ file regenerates the committed sources byte for byte, and ~just check~ runs
 no longer exists. The committed ~.mlpl~ files remain the source of truth;
 when they change, this document is edited to match.
 
-To evaluate a block in place with =C-c C-c=, load sw-MLPL's org-babel
-backend from the adjacent checkout. Evaluate this block once (it is not
-tangled):
+** Evaluating blocks
+
+The document never evaluates anything on export (~:eval no-export~ in the
+header), so =C-c C-e h o= produces HTML with no prompts. Evaluation is for
+reading interactively. To make =C-c C-c= work, evaluate this setup block
+once per Emacs session; it loads sw-MLPL's org-babel backend from the
+adjacent checkout and points it at whichever interpreter exists (GUI Emacs
+has a minimal PATH, so the full path matters):
 
 #+begin_src emacs-lisp :tangle no
-(add-to-list 'load-path (expand-file-name "../../sw-mlpl/elisp" (file-name-directory (buffer-file-name))))
-(require 'ob-mlpl)
-(setq org-babel-mlpl-command (expand-file-name "../../sw-mlpl/target/release/mlpl-repl" (file-name-directory (buffer-file-name))))
+(let* ((here (file-name-directory (buffer-file-name)))
+       (sw-mlpl (expand-file-name "../../sw-mlpl" here))
+       (candidates (list (expand-file-name "target/release/mlpl-repl" sw-mlpl)
+                         (expand-file-name "target/debug/mlpl-repl" sw-mlpl)
+                         (executable-find "mlpl-repl")
+                         (expand-file-name "~/.local/softwarewrighter/bin/mlpl-repl"))))
+  (add-to-list 'load-path (expand-file-name "elisp" sw-mlpl))
+  (require 'ob-mlpl)
+  (setq org-babel-mlpl-command
+        (or (seq-find (lambda (p) (and p (file-executable-p p))) candidates)
+            (user-error "no mlpl-repl found; build ../sw-mlpl or set org-babel-mlpl-command")))
+  (setq org-confirm-babel-evaluate nil)
+  (message "ob-mlpl ready: %s" org-babel-mlpl-command))
 #+end_src
 
-A block that defines functions evaluates silently; the blocks worth running
-are the small pure ones, and the entries need arguments, so run those from
-the shell with ~just loop~, ~just replay~, or ~just v0~.
+Three things to know before pressing =C-c C-c= on a block:
 
-To regenerate the sources from this file: ~just tangle~.
+- A block runs in a fresh interpreter on a temporary file, so a block that
+  says ~include "model.mlpl"~ cannot find its neighbour and will report an
+  include error. The function blocks in this document are for reading and
+  tangling; the runnable ones are the small self-contained examples in the
+  primer below, marked ~:eval query~.
+- ~org-confirm-babel-evaluate~ controls the yes/no prompt. The setup block
+  sets it to ~nil~ (never ask) for the session; set it back to ~t~ to be
+  asked, or to a function to decide per block.
+- To evaluate every runnable block at once use =C-c C-v C-b=
+  (~org-babel-execute-buffer~); blocks marked ~:eval no-export~ or
+  ~:eval never~ are skipped, so that command runs only the primer examples.
+
+** Publishing
+
+~just publish-doc~ writes ~out/docs/mlplcode.{html,txt,md,pdf}~ with Emacs
+in batch mode and, for the PDF, Chrome headless; nothing is evaluated and
+nothing is installed. The same exports are available interactively from
+=C-c C-e=.
+
+** Regenerating the sources
+
+~just tangle~ runs org-babel-tangle over this file and then the drift
+check; ~just tangle-check~ runs only the check.
 
 * MLPL in ten minutes
 
@@ -67,6 +104,56 @@ The language is small and the agent uses a small part of it.
   relative to the including file. A binding made at the top level of a file
   is visible inside functions that run later, which the tools module uses
   for the extension root.
+
+** Try it: Results and ~?~
+
+These three blocks are self-contained and safe to evaluate.
+
+#+begin_src mlpl :tangle no :eval query :exports both
+def u:half(n) {
+  "Half of a non-negative number, or an err naming the problem.";
+  if n < 0 { err("negative: " + to_string(n)) } else { ok(n / 2) }
+}
+
+def u:quarter(n) {
+  "Half of half; the ? returns the first err as this function's value.";
+  h = u:half(n)?;
+  u:half(h)
+}
+
+print(u:quarter(8));
+print(u:quarter(-4));
+print(unwrap_or(u:quarter(-4), -1))
+#+end_src
+
+** Try it: records and partials
+
+#+begin_src mlpl :tangle no :eval query :exports both
+def u:greet(greeting, name) {
+  "Two-argument function; binding the first with call() makes a one-argument partial.";
+  greeting + ", " + name
+}
+
+hello = call(:u:greet, "hello");
+action = {tool: "read", path: "src/lib.mlpl"};
+print(call(hello, "world"));
+print(action.tool, action.path);
+print(type_of(hello))
+#+end_src
+
+** Try it: the string toolkit
+
+Note the four words from ~"cargo  test --lib"~: the double space yields an
+empty word, which is exactly what the parser's ~u:split_words~ removes.
+
+#+begin_src mlpl :tangle no :eval query :exports both
+line = "READ   src/lib.mlpl  ";
+verb_end = str_find(line, " ");
+print(str_slice(line, 0, verb_end));
+words = str_split("cargo  test --lib", " ");
+print(list_len(words), unwrap(list_get(words, 0)));
+print(str_join(["a", "b", "c"], "-"))
+#+end_src
 
 * The shape of the agent
 

@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+# Publish docs/mlplcode.org to out/docs/ as HTML, plain text, Markdown, and
+# PDF. Export never evaluates a source block (the document sets
+# :eval no-export), so no prompts and no interpreter are needed. Uses
+# existing tools only: Emacs (PATH or the Emacs.app bundle) for the org
+# exports, and Google Chrome headless for the PDF when present. Installs
+# nothing; formats whose tool is missing are skipped with a notice.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+out=$repo_dir/out/docs
+mkdir -p "$out"
+cp "$repo_dir/docs/mlplcode.org" "$out/mlplcode.org"
+
+emacs=${EMACS:-}
+[ -n "$emacs" ] || ! command -v emacs >/dev/null 2>&1 || emacs=emacs
+[ -n "$emacs" ] || [ ! -x /Applications/Emacs.app/Contents/MacOS/Emacs ] || emacs=/Applications/Emacs.app/Contents/MacOS/Emacs
+[ -n "$emacs" ] || { echo "no Emacs found; set EMACS=/path/to/emacs" >&2; exit 1; }
+
+export_with() {
+    "$emacs" --batch -l org -l ox-md -l ox-ascii \
+        --eval "(setq org-confirm-babel-evaluate (lambda (lang body) (error \"publish: a %s block asked to evaluate; the document must not evaluate on export\" lang)))" \
+        --eval "(find-file \"$out/mlplcode.org\")" \
+        --eval "$1" 2>&1 | grep -v "^Loading\|htmlize" || true
+}
+export_with "(org-html-export-to-html)"
+export_with "(org-ascii-export-to-ascii)"
+export_with "(org-md-export-to-markdown)"
+
+chrome=${CHROME:-}
+for app in "/Applications/Google Chrome.app" "$HOME/Applications/Google Chrome.app" "/Applications/Chromium.app" "$HOME/Applications/Chromium.app"; do
+    [ -n "$chrome" ] || [ ! -x "$app/Contents/MacOS/$(basename "$app" .app)" ] || chrome="$app/Contents/MacOS/$(basename "$app" .app)"
+done
+[ -n "$chrome" ] || ! command -v google-chrome >/dev/null 2>&1 || chrome=google-chrome
+[ -n "$chrome" ] || ! command -v chromium >/dev/null 2>&1 || chrome=chromium
+if [ -n "$chrome" ]; then
+    "$chrome" --headless=new --disable-gpu --no-pdf-header-footer \
+        --print-to-pdf="$out/mlplcode.pdf" "file://$out/mlplcode.html" >/dev/null 2>&1 || echo "publish: PDF failed" >&2
+else
+    echo "publish: no Chrome found for PDF (set CHROME=/path/to/chrome); HTML, text, and Markdown written" >&2
+fi
+
+rm -f "$out/mlplcode.org"
+ls -la "$out"
