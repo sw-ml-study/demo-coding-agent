@@ -1,7 +1,12 @@
 # A coding agent small enough to read
 
-*Draft. Numbers are from the repository on 2026-09-16; the author will edit
-before publishing.*
+**The published post is
+[A coding agent in MLPL](https://blog.softwarewrighter.com/2026/09/16/ai-tools-coding-agent-in-mlpl/)
+on blog.softwarewrighter.com.** What follows is the draft it was written
+from, kept for historical value; it is not maintained, and the numbers in it
+are from the repository on 2026-09-16.
+
+---
 
 ![mlplcode adding a function and a passing test to a small MLPL project](../assets/demo/loop.gif)
 
