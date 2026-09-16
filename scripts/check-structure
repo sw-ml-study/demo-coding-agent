@@ -20,7 +20,9 @@ for path in AGENTS.md COPYRIGHT LICENSE README.md justfile \
     extensions/agent-tools/module.mlpl extensions/agent-tools/src/lib.rs \
     probes/agent_tools_probe.mlpl probes/agent_tools_loop_probe.mlpl probes/rust_close_loop_probe.mlpl \
     scripts/check-agent-tools scripts/run-rust-demo docs/mlplcode.org scripts/check-tangle \
-    scripts/tangle; do
+    scripts/tangle examples/mlplcode-example/TASK.txt examples/mlplcode-example/transcript.txt \
+    examples/mlplcode-example/hello.mlpl examples/mlplcode-example/tests/test_hello.mlpl \
+    examples/mlplcode-example/test-results.txt; do
     if [ ! -f "$repo_dir/$path" ]; then
         echo "missing required file: $path" >&2
         exit 1

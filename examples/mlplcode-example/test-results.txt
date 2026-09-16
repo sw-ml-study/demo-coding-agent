@@ -1,0 +1,2 @@
+--- independent test run ---
+Ok({expected_failures: 0, passed: 1, skipped: 0, tests: 1})

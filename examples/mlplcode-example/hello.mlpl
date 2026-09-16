@@ -1,0 +1,6 @@
+# A simple greeting module.
+
+def u:hello(name) {
+  "Return a greeting string.";
+  str_concat("hello, ", name)
+}

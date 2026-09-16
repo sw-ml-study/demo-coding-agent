@@ -275,7 +275,13 @@ Every other demo restores the files it touched. This one keeps them:
 `work/mlplcode-example/` (gitignored) ends up holding the task, the live
 transcript, the `hello.mlpl` module and `tests/test_hello.mlpl` the agent
 wrote from scratch, and `test-results.txt` from an independent run of that
-test file. The task starts by reading the example project's two files, which
+test file. A committed copy of one such run, by `devstral-small-2:24b` in
+six steps, is in [`examples/mlplcode-example/`](examples/mlplcode-example/):
+read its [transcript](examples/mlplcode-example/transcript.txt), the
+[module it wrote](examples/mlplcode-example/hello.mlpl), the
+[test it wrote](examples/mlplcode-example/tests/test_hello.mlpl), and the
+[independent result](examples/mlplcode-example/test-results.txt). The gate
+re-runs that test file so the committed example must keep passing. The task starts by reading the example project's two files, which
 is how a model that has never seen MLPL learns that a function is written
 `def u:name(args) { "docstring"; body }`; without that step it invented
 `//` comments and dropped `def`.

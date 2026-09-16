@@ -1,0 +1,12 @@
+# Tests for the hello module.
+
+include "../vendor/mlplunit.mlpl";
+include "../hello.mlpl";
+
+@test {name: "hello greets by name", tags: ["hello"]}
+def u:test_hello() {
+  "Assert that u:hello returns the correct greeting.";
+  u:assert_eq(u:hello("world"), "hello, world", "greeting")
+}
+
+u:run_registered_tests()

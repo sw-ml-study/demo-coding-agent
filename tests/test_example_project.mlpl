@@ -24,4 +24,16 @@ def u:test_vendor_pin_documented() {
   u:assert_ok(read_text("examples/tiny-mlpl-project/vendor/mlplunit.mlpl"), "library present")
 }
 
+@test {name: "the committed agent-written example still passes its own test", tags: ["example", "agent-written"]}
+def u:test_agent_written_example_passes() {
+  "examples/mlplcode-example was written by the agent live; its test file must keep passing under run_script.";
+  result = run_script("examples/mlplcode-example/tests/test_hello.mlpl", {source_dir: ".", capture: 1});
+  u:assert_ok(result, "run_script ok")?;
+  outcome = unwrap(result);
+  u:assert_text_eq(outcome.status, "ok", "status")?;
+  u:assert_eq(unwrap(outcome.value_raw).passed, 1, "one test passed")?;
+  transcript = unwrap(read_text("examples/mlplcode-example/transcript.txt"));
+  u:assert_true(str_find(transcript, "stopped after 6 step(s): done") > 0, "the recorded run finished in six steps")
+}
+
 u:run_registered_tests()
