@@ -233,6 +233,21 @@ without evidence is told `NOT VERIFIED` and keeps working. The six live
 attempts it took to get here, and what each one changed, are in
 [progression](docs/progression.md).
 
+## A kept example
+
+```sh
+OLLAMA_MODEL=devstral-small-2:24b just example
+```
+
+Every other demo restores the files it touched. This one keeps them:
+`work/mlplcode-example/` (gitignored) ends up holding the task, the live
+transcript, the `hello.mlpl` module and `tests/test_hello.mlpl` the agent
+wrote from scratch, and `test-results.txt` from an independent run of that
+test file. The task starts by reading the example project's two files, which
+is how a model that has never seen MLPL learns that a function is written
+`def u:name(args) { "docstring"; body }`; without that step it invented
+`//` comments and dropped `def`.
+
 ## The Rust target
 
 ```sh

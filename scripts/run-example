@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+# Produce a kept, inspectable example of the agent writing working code:
+# work/mlplcode-example/ gets the vendored assertion library, the task, the
+# live transcript, the files the agent wrote, and an independent test run.
+# Nothing is restored afterwards; the directory is gitignored under work/.
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+mlpl=$("$repo_dir/scripts/select-mlpl")
+example=work/mlplcode-example
+dir=$repo_dir/$example
+
+rm -rf "$dir"
+mkdir -p "$dir/vendor" "$dir/tests"
+cp "$repo_dir/examples/tiny-mlpl-project/vendor/mlplunit.mlpl" "$dir/vendor/mlplunit.mlpl"
+cp "$repo_dir/examples/tiny-mlpl-project/vendor/VENDOR.md" "$dir/vendor/VENDOR.md"
+
+task="First READ examples/tiny-mlpl-project/lib.mlpl and examples/tiny-mlpl-project/tests/test_add.mlpl and copy their syntax exactly: every function is written def u:name(args) { \"docstring\"; body }. Then create a new MLPL module $example/hello.mlpl that starts with a comment line (MLPL comments begin with #, there is no //) and defines u:hello(name) returning the string \"hello, \" followed by name (use str_concat). Then create $example/tests/test_hello.mlpl that starts with a # comment line, has the two lines include \"../vendor/mlplunit.mlpl\"; and include \"../hello.mlpl\";, one @test {name: \"hello greets by name\", tags: [\"hello\"]} function u:test_hello with a docstring that asserts u:assert_eq(u:hello(\"world\"), \"hello, world\", \"greeting\"), and ends with u:run_registered_tests(). Then run: RUN mlpl $example/tests/test_hello.mlpl. Reply DONE only after the run observation shows status: ok with the test passed."
+printf '%s\n' "$task" > "$dir/TASK.txt"
+
+status=0
+LOOP_TASK="$task" LOOP_BUDGET="${LOOP_BUDGET:-12}" LOOP_APPROVE=1 LOOP_VERIFY=tests \
+    "$repo_dir/scripts/run-loop" 2>&1 | tee "$dir/transcript.txt" || status=$?
+
+echo "--- independent test run ---" | tee "$dir/test-results.txt"
+"$mlpl" --source-dir "$repo_dir" -f "$dir/tests/test_hello.mlpl" 2>&1 | tee -a "$dir/test-results.txt" || true
+echo "--- files the agent wrote ---"
+ls -la "$dir" "$dir/tests"
+exit "$status"

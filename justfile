@@ -84,6 +84,10 @@ publish-doc:
 publish-doc-evaluated:
     PUBLISH_EVAL=1 ./scripts/publish-doc
 
+# Live: the agent writes a hello-world module plus test into work/mlplcode-example and the result is kept.
+example:
+    ./scripts/run-example
+
 # Run the complete precommit gate.
 check:
     ./scripts/check
