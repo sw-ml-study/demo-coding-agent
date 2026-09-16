@@ -1,0 +1,8 @@
+number = 2
+slug = "blog-post-draft"
+status = "in-progress"
+description = "Draft docs/blog-post.md: a publishable post about building mlplcode, a coding..."
+role = "production"
+context_files = []
+created_at = "2026-09-16T08:31:58"
+commits = []
