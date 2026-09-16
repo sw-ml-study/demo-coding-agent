@@ -6,3 +6,7 @@ license = "MIT"
 description = "Fixture crate the coding agent edits under test."
 
 [dependencies]
+
+# Stand-alone: keep this fixture crate out of the repository workspace so
+# `cargo test --manifest-path examples/tiny-rust-project/Cargo.toml` works.
+[workspace]
