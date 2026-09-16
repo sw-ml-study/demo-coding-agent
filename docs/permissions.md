@@ -27,9 +27,23 @@ permissions = {
 
 `u:authorize(action, permissions)` in `agents/loop.mlpl` is a pure function
 returning `"allow"`, `"ask"`, or `"deny"`, tested without a model or a
-filesystem. The measured record has one field per tool: `{read, search,
-write, run}`; `done` is always allowed. `git` and `shell` fields arrive with
-the extension in Saga 2.
+filesystem, row by row in `tests/test_loop.mlpl`. The record has six fields
+and RUN is classified by its first word:
+
+| action                 | field    | live default | mechanism |
+|------------------------|----------|--------------|-----------|
+| READ                   | `read`   | allow        | `read_text` |
+| SEARCH                 | `search` | allow        | `_agent_tools:search` (ripgrep crates) |
+| WRITE                  | `write`  | ask          | `write_atomic` |
+| RUN mlpl `<path>`      | `run`    | allow        | `run_script`, pure MLPL |
+| RUN cargo `...`        | `run`    | allow        | `_agent_tools:run`, allow-listed subcommands only |
+| RUN git `...`          | `git`    | ask          | `_agent_tools:run`, `diff` and `status` only |
+| RUN anything else      | `shell`  | deny         | never executes; `shell: "allow"` still refuses |
+| DONE                   |          | allow        | gated by the verify function |
+
+Without the extension loaded, SEARCH and RUN cargo/git observe that the
+extension is not loaded instead of failing. `scripts/run-loop` loads it
+whenever `target/debug/libmlpl_extension_agent_tools.*` exists.
 
 ## Allow-list for `RUN`
 
@@ -45,7 +59,7 @@ is the child's status, its final value, any error, and one line per
 finished test parsed from the captured events (`passed: name`,
 `failed: name -- diagnostic`). A failing test file reports `status: err`.
 
-Planned with the Rust extension:
+Through the Rust extension, enforced again in Rust before anything starts:
 
 ```text
 cargo test *   cargo check *   cargo clippy *   cargo fmt *

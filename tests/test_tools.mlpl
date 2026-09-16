@@ -49,10 +49,18 @@ def u:test_run_tool_missing() {
   u:assert_true(str_find(obs, "No such file") > 0, "reason")
 }
 
-@test {name: "run_tool refuses a disallowed command as an observation", tags: ["run", "allow-list"]}
-def u:test_run_tool_refused() {
-  "The refusal text is the observation.";
-  u:assert_text_eq(u:run_tool(["cargo", "test"]), "run: command not allowed: cargo test", "refusal observed")
+@test {name: "run_tool routes by kind: shell refused, cargo and git need the extension", tags: ["run", "allow-list"]}
+def u:test_run_tool_kinds() {
+  "Without the library loaded, cargo and git observe the missing extension; shell is refused by name.";
+  u:assert_text_eq(u:run_kind(["mlpl", "a.mlpl"]), "mlpl", "mlpl kind")?;
+  u:assert_text_eq(u:run_kind(["cargo", "test"]), "cargo", "cargo kind")?;
+  u:assert_text_eq(u:run_kind(["git", "status"]), "git", "git kind")?;
+  u:assert_text_eq(u:run_kind(["sh", "-c", "x"]), "shell", "shell kind")?;
+  u:assert_text_eq(u:run_kind([]), "shell", "empty is shell")?;
+  u:assert_text_eq(u:run_tool(["sh", "-c", "ls"]), "run: command not allowed: sh -c ls", "shell refused")?;
+  u:assert_text_eq(u:run_tool(["cargo", "test"]), "run: cargo needs the agent-tools extension (not loaded)", "cargo needs extension")?;
+  u:assert_text_eq(u:run_tool(["git", "status"]), "run: git needs the agent-tools extension (not loaded)", "git needs extension")?;
+  u:assert_text_eq(u:search_tool("x"), "search needs the agent-tools extension (not loaded)", "search needs extension")
 }
 
 @test {name: "render_event shows only finished tests", tags: ["run", "observe"]}

@@ -41,7 +41,7 @@ def u:test_close_loop_mlpl() {
   "Scripted end to end: both files change, RUN observes two passed tests, DONE; the example is restored.";
   original_lib = unwrap(read_text(u:lib_path()));
   original_tests = unwrap(read_text(u:test_path()));
-  permissions = {read: "allow", search: "allow", write: "ask", run: "allow"};
+  permissions = {read: "allow", search: "allow", write: "ask", run: "allow", git: "ask", shell: "deny"};
   final = u:run_loop("add u:mul with a test and make the tests pass", 10, u:transcript_add_mul(), permissions, :u:decide_yes, :u:verify_tests_passed);
   outcome_lib = read_text(u:lib_path());
   outcome_tests = read_text(u:test_path());

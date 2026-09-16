@@ -184,9 +184,11 @@ authorize, execute, update. The model reply is parsed by
 never writes. The loop stops with a reason value: `done`, `denied`, or
 `budget`. A malformed reply or a failed builtin becomes an observation the
 model sees on its next turn. `RUN mlpl <path>` runs an MLPL test file
-through `run_script` and observes its status and per-test results; any other
-command is refused without executing. `SEARCH` observes "not available yet"
-until the extension exists. `LOOP_TASK` and `LOOP_BUDGET` override
+through `run_script` and observes its status and per-test results; with the
+Rust extension built, `SEARCH` is ripgrep over the project and `RUN cargo
+...` and `RUN git ...` execute allow-listed subcommands only, git under its
+own `ask` permission. Anything else is shell and is denied without
+executing. `LOOP_TASK` and `LOOP_BUDGET` override
 the task and the step limit. The system prompt is
 [`prompts/act.md`](prompts/act.md).
 

@@ -1,4 +1,99 @@
-# RUN mechanism for MLPL projects in pure MLPL: an argv allow-list and run_script rendered as an observation.
+# RUN and SEARCH mechanisms: pure-MLPL run_script for mlpl files, the agent-tools extension for cargo, git, and search.
+
+# Project root handed to the agent-tools extension; empty until the entry loads the library.
+agent_tools_root = "";
+
+def u:run_kind(argv) {
+  "Classify argv: mlpl (run_script), cargo or git (extension, separately permissioned), else shell.";
+  first = if list_len(argv) > 0 {
+    unwrap(list_get(argv, 0))
+  } else {
+    ""
+  };
+  if str_eq(first, "mlpl") {
+    "mlpl"
+  } else {
+    if str_eq(first, "cargo") {
+      "cargo"
+    } else {
+      if str_eq(first, "git") {
+        "git"
+      } else {
+        "shell"
+      }
+    }
+  }
+}
+
+def u:native_loaded() {
+  "1 when the entry has loaded the agent-tools extension and set its root.";
+  if str_len(agent_tools_root) > 0 {
+    1
+  } else {
+    0
+  }
+}
+
+def u:render_native_run(outcome) {
+  "Observation text for an extension run: status, timeout flag, then stdout and stderr.";
+  head = str_join(["status: ", to_string(outcome.status), if outcome.timed_out {
+        " (timed out after 120 s)"
+      } else {
+        ""
+      }], "");
+  body = str_join(["stdout:", outcome.stdout, "stderr:", outcome.stderr], "\n");
+  str_join([head, body], "\n")
+}
+
+def u:native_result(result) {
+  "An extension call answers a record, or err(message) when Rust refused it; make both an observation-ready value.";
+  if str_eq(type_of(result), "result") {
+    if is_err(result) {
+      err(str_concat("ERROR: ", err_message(result)))
+    } else {
+      ok(unwrap(result))
+    }
+  } else {
+    ok(result)
+  }
+}
+
+def u:run_native(argv) {
+  "Run cargo or git through the extension inside the project root, or say the extension is not loaded.";
+  if u:native_loaded() {
+    outcome = u:native_result(_agent_tools:run(agent_tools_root, str_join(argv, " ")));
+    if is_err(outcome) {
+      err_message(outcome)
+    } else { u:render_native_run(unwrap(outcome)) }
+  } else {
+    str_join(["run: ", u:run_kind(argv), " needs the agent-tools extension (not loaded)"], "")
+  }
+}
+
+def u:render_search(found) {
+  "Observation text for a search record: count, truncation flag, then the path:line:text lines.";
+  if found.count == 0 {
+    "no matches"
+  } else {
+    str_join([to_string(found.count), " match(es)", if found.truncated {
+          " (truncated)"
+        } else {
+          ""
+        }, "\n", found.matches], "")
+  }
+}
+
+def u:search_tool(text) {
+  "Search the project through the extension; without it observe that search is not available.";
+  if u:native_loaded() {
+    found = u:native_result(_agent_tools:search(agent_tools_root, text));
+    if is_err(found) {
+      err_message(found)
+    } else { u:render_search(unwrap(found)) }
+  } else {
+    "search needs the agent-tools extension (not loaded)"
+  }
+}
 
 def u:run_refused(argv) {
   "The observation for a command outside the allow-list; nothing is executed.";
@@ -71,9 +166,16 @@ def u:run_mlpl(path) {
 }
 
 def u:run_tool(argv) {
-  "Apply the allow-list, then run; a refused command is an observation, never an execution.";
-  allowed = u:run_allowed(argv);
-  if is_ok(allowed) { u:run_mlpl(unwrap(allowed)) } else {
-    err_message(allowed)
+  "Dispatch by kind: mlpl through run_script, cargo and git through the extension, shell refused as an observation.";
+  kind = u:run_kind(argv);
+  if str_eq(kind, "mlpl") {
+    allowed = u:run_allowed(argv);
+    if is_ok(allowed) { u:run_mlpl(unwrap(allowed)) } else {
+      err_message(allowed)
+    }
+  } else {
+    if str_eq(kind, "shell") {
+      err_message(u:run_refused(argv))
+    } else { u:run_native(argv) }
   }
 }

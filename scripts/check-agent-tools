@@ -33,3 +33,13 @@ printf '%s\n' "$output" | grep -q "run status: 0 timed_out: 0" || {
 printf '%s\n' "$output" | grep -q "command not allowed: sh -c ls" || {
     printf '%s\n' "$output" >&2; echo "agent-tools: sh -c was not refused" >&2; exit 1; }
 echo "agent-tools: cargo tests, clippy, sw-checklist, dynamic load, search, run, refusal"
+
+# The loop itself, with the extension loaded: SEARCH and RUN git observe
+# real results, and a cargo subcommand outside the allow-list is refused
+# by the extension rather than executed.
+output=$("$mlpl" --source-dir "$repo_dir" -f "$repo_dir/probes/agent_tools_loop_probe.mlpl" -- "$library" "$repo_dir")
+for needle in "match(es)" "examples/tiny-mlpl-project/lib.mlpl:3:def u:add(a, b) {" "status: 0" "command not allowed: cargo nope" "reason: done"; do
+    printf '%s\n' "$output" | grep -qF "$needle" || {
+        printf '%s\n' "$output" >&2; echo "agent-tools loop probe missing: $needle" >&2; exit 1; }
+done
+echo "agent-tools: loop routes SEARCH and RUN git through the extension and refuses cargo nope"

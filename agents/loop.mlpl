@@ -13,6 +13,20 @@ def u:build_context(state) {
   str_join(["TASK:", state.task, "", "WORK SO FAR:", state.history, "", "Choose the next action."], "\n")
 }
 
+def u:authorize_run(argv, permissions) {
+  "RUN policy by kind: mlpl and cargo under run, git under git, anything else under shell.";
+  kind = u:run_kind(argv);
+  if str_eq(kind, "git") {
+    permissions.git
+  } else {
+    if str_eq(kind, "shell") {
+      permissions.shell
+    } else {
+      permissions.run
+    }
+  }
+}
+
 def u:authorize(action, permissions) {
   "Pure policy lookup: allow, ask, or deny for the action's tool; done is always allowed.";
   if str_eq(action.tool, "read") {
@@ -25,7 +39,7 @@ def u:authorize(action, permissions) {
         permissions.write
       } else {
         if str_eq(action.tool, "run") {
-          permissions.run
+          u:authorize_run(action.argv, permissions)
         } else {
           "allow"
         }
@@ -63,7 +77,7 @@ def u:execute(action) {
       u:observe_result(write_atomic(action.path, action.body), str_concat("wrote ", action.path))
     } else {
       if str_eq(action.tool, "search") {
-        "search is not available yet"
+        u:search_tool(action.text)
       } else {
         if str_eq(action.tool, "run") {
           u:run_tool(action.argv)

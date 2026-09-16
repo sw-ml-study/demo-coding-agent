@@ -3,12 +3,12 @@ include "agents/loop.mlpl";
 
 def u:allow_all() {
   "Permissions that allow every tool.";
-  {read: "allow", search: "allow", write: "allow", run: "allow"}
+  {read: "allow", search: "allow", write: "allow", run: "allow", git: "allow", shell: "deny"}
 }
 
 def u:ask_writes() {
   "Permissions where writes must be approved.";
-  {read: "allow", search: "allow", write: "ask", run: "allow"}
+  {read: "allow", search: "allow", write: "ask", run: "allow", git: "ask", shell: "deny"}
 }
 
 def u:transcript_write_note() {
@@ -26,10 +26,13 @@ def u:test_build_context() {
 @test {name: "authorize is a pure lookup by tool", tags: ["loop", "policy"]}
 def u:test_authorize() {
   "Prove allow, ask, deny come straight from the permissions record and done is always allowed.";
-  permissions = {read: "allow", search: "deny", write: "ask", run: "deny"};
+  permissions = {read: "allow", search: "deny", write: "ask", run: "deny", git: "ask", shell: "deny"};
   u:assert_text_eq(u:authorize({tool: "read", path: "a"}, permissions), "allow", "read")?;
   u:assert_text_eq(u:authorize({tool: "write", path: "a", body: ""}, permissions), "ask", "write")?;
-  u:assert_text_eq(u:authorize({tool: "run", argv: ["cargo"]}, permissions), "deny", "run")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["mlpl", "t.mlpl"]}, permissions), "deny", "run mlpl uses run")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["cargo", "test"]}, permissions), "deny", "run cargo uses run")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["git", "status"]}, permissions), "ask", "run git uses git")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["rm", "-rf", "x"]}, permissions), "deny", "anything else is shell")?;
   u:assert_text_eq(u:authorize({tool: "search", text: "x"}, permissions), "deny", "search")?;
   u:assert_text_eq(u:authorize({tool: "done", summary: "x"}, permissions), "allow", "done")
 }
@@ -60,7 +63,7 @@ def u:test_loop_read_write_done() {
 @test {name: "a denied write stops the loop without writing", tags: ["loop", "policy"]}
 def u:test_loop_denied_write() {
   "With write: deny the second step stops with reason denied and no file appears.";
-  permissions = {read: "allow", search: "allow", write: "deny", run: "allow"};
+  permissions = {read: "allow", search: "allow", write: "deny", run: "allow", git: "allow", shell: "deny"};
   final = u:run_loop("make a note", 6, u:transcript_write_note(), permissions, :u:decide_yes, :u:verify_always);
   u:assert_text_eq(final.reason, "denied", "stop reason")?;
   u:assert_eq(final.iteration, 2, "stopped on the write")?;
@@ -109,14 +112,31 @@ def u:test_loop_read_error_observed() {
   u:assert_true(str_find(final.history, "ERROR: read_text:") > 0, "error observed")
 }
 
-@test {name: "search is a placeholder and a non-mlpl RUN is refused", tags: ["loop", "saga2"]}
-def u:test_loop_unavailable_tools() {
-  "Until the extension exists SEARCH observes a placeholder; RUN outside the allow-list is refused, not executed.";
-  ask = call(:u:ask_transcript, ["SEARCH pub fn", "RUN cargo test", "DONE ok"]);
-  final = u:run_loop("x", 4, ask, u:allow_all(), :u:decide_no, :u:verify_always);
-  u:assert_true(str_find(final.history, "search is not available yet") > 0, "search placeholder")?;
-  u:assert_true(str_find(final.history, "run: command not allowed: cargo test") > 0, "run refused")?;
+@test {name: "without the extension SEARCH and RUN cargo say so, and shell stops the run", tags: ["loop", "policy"]}
+def u:test_loop_without_extension() {
+  "No library loaded: search and cargo observe that the extension is missing; a shell command is denied and ends the run.";
+  ask = call(:u:ask_transcript, ["SEARCH pub fn", "RUN cargo test", "RUN rm -rf examples", "DONE never"]);
+  final = u:run_loop("x", 6, ask, u:allow_all(), :u:decide_no, :u:verify_always);
+  u:assert_true(str_find(final.history, "search needs the agent-tools extension (not loaded)") > 0, "search observation")?;
+  u:assert_true(str_find(final.history, "run: cargo needs the agent-tools extension (not loaded)") > 0, "cargo observation")?;
+  u:assert_text_eq(final.reason, "denied", "shell denied stops the run")?;
+  u:assert_eq(str_find(final.answer, "denied: RUN rm -rf examples"), 0, "the shell command is named")?;
   u:assert_text_eq(final.files, "", "no files touched")
+}
+
+@test {name: "the policy table holds row by row", tags: ["loop", "policy"]}
+def u:test_policy_table() {
+  "docs/permissions.md: read and search allow, write ask, run allow for mlpl and cargo, git ask, shell deny.";
+  live = {read: "allow", search: "allow", write: "ask", run: "allow", git: "ask", shell: "deny"};
+  u:assert_text_eq(u:authorize({tool: "read", path: "a"}, live), "allow", "read")?;
+  u:assert_text_eq(u:authorize({tool: "search", text: "a"}, live), "allow", "search")?;
+  u:assert_text_eq(u:authorize({tool: "write", path: "a", body: ""}, live), "ask", "write")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["mlpl", "t.mlpl"]}, live), "allow", "run mlpl")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["cargo", "test"]}, live), "allow", "run cargo")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["git", "diff"]}, live), "ask", "run git")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: ["sh", "-c", "x"]}, live), "deny", "run shell")?;
+  u:assert_text_eq(u:authorize({tool: "run", argv: []}, live), "deny", "empty run is shell")?;
+  u:assert_text_eq(u:authorize({tool: "done", summary: "x"}, live), "allow", "done")
 }
 
 @test {name: "RUN mlpl executes the example tests and observes the results", tags: ["loop", "run"]}

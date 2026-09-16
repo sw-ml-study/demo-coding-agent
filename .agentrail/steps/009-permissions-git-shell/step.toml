@@ -1,6 +1,6 @@
 number = 9
 slug = "permissions-git-shell"
-status = "pending"
+status = "in-progress"
 description = "Extend the permission record with git and shell fields ({read, search, write,..."
 role = "production"
 context_files = []

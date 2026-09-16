@@ -20,7 +20,7 @@ def u:test_replay_reproduces_live_run() {
   original_lib = unwrap(read_text(lib));
   original_tests = unwrap(read_text(tests));
   ask = u:replay_ask("fixtures/transcripts/mlpl-mul-qwen2.5-coder-7b.txt");
-  final = u:run_loop("replay", 12, ask, {read: "allow", search: "allow", write: "allow", run: "allow"}, :u:decide_yes, :u:verify_tests_passed);
+  final = u:run_loop("replay", 12, ask, {read: "allow", search: "allow", write: "allow", run: "allow", git: "allow", shell: "deny"}, :u:decide_yes, :u:verify_tests_passed);
   write_atomic(lib, original_lib)?;
   write_atomic(tests, original_tests)?;
   u:assert_text_eq(final.reason, "done", "verified done")?;

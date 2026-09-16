@@ -8,6 +8,14 @@ budget = unwrap(to_number(unwrap_or(list_get(args(), 3), "8")));
 approve = unwrap_or(list_get(args(), 4), "0");
 verify_mode = unwrap_or(list_get(args(), 5), "always");
 
+library = env("MLPLCODE_AGENT_TOOLS");
+if is_ok(library) {
+  load_extension(unwrap(library));
+  agent_tools_root = unwrap(env("MLPLCODE_ROOT"));
+  print("agent-tools: loaded, root", agent_tools_root)
+} else {
+  print("agent-tools: not loaded (SEARCH and RUN cargo/git unavailable)")
+};
 system = unwrap(read_text("prompts/act.md"));
 ask = call(:u:ask_live, host, model, system);
 decide = if str_eq(approve, "1") {
@@ -19,7 +27,7 @@ decide = if str_eq(approve, "1") {
     :u:decide_no
   }
 };
-permissions = {read: "allow", search: "allow", write: "ask", run: "allow"};
+permissions = {read: "allow", search: "allow", write: "ask", run: "allow", git: "ask", shell: "deny"};
 verify = if str_eq(verify_mode, "tests") {
   :u:verify_tests_passed
 } else {

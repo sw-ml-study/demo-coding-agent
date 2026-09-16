@@ -6,7 +6,7 @@ task = unwrap_or(list_get(args(), 1), "Add u:mul(a, b) to examples/tiny-mlpl-pro
 budget = unwrap(to_number(unwrap_or(list_get(args(), 2), "12")));
 
 ask = u:replay_ask(transcript);
-permissions = {read: "allow", search: "allow", write: "allow", run: "allow"};
+permissions = {read: "allow", search: "allow", write: "allow", run: "allow", git: "allow", shell: "deny"};
 
 print("mlplcode replay: model replies from", transcript);
 print("parser, file writes, and test runs are live");

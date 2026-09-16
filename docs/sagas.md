@@ -46,7 +46,11 @@ extension: `_agent_tools:search` on the ripgrep crates honouring
 `.gitignore`, `_agent_tools:run` for `cargo test/check/clippy/fmt` and
 `git diff/status` only, with a 120 s timeout and bounded output, pinned to
 demo-extensions `2b2ae48` by git dependency, proven by cargo tests, clippy,
-`sw-checklist`, and a stock-CLI `load_extension` probe.
+`sw-checklist`, and a stock-CLI `load_extension` probe. Step 009 wired it
+in: the permission record gained `git` and `shell`, RUN is classified by
+its first word (mlpl stays pure MLPL, cargo under `run`, git under `git`,
+everything else is shell and denied), SEARCH reaches the extension when the
+built library exists, and the policy table is tested row by row.
 
 First target an MLPL example project: `RUN` maps to `run_script` in pure
 MLPL, the protocol is hardened from live transcripts (fences, END-less

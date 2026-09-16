@@ -1,0 +1,12 @@
+# Prove the loop routes SEARCH and RUN git through the loaded agent-tools extension.
+include "../agents/loop.mlpl";
+
+load_extension(unwrap(list_get(args(), 0)));
+agent_tools_root = unwrap(list_get(args(), 1));
+
+ask = call(:u:ask_transcript, ["SEARCH def u:add", "RUN git status --short examples/tiny-mlpl-project", "RUN cargo nope", "DONE probed"]);
+permissions = {read: "allow", search: "allow", write: "allow", run: "allow", git: "allow", shell: "deny"};
+final = u:run_loop("probe", 6, ask, permissions, :u:decide_no, :u:verify_always);
+print(final.history);
+print("reason:", final.reason);
+final.reason
